@@ -1,0 +1,9 @@
+{
+  "id": "canvas-utilities",
+  "name": "Canvas Utilities",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "Utilities for faster and easier Obsidian Canvas authoring workflows.",
+  "author": "ibbuilds",
+  "isDesktopOnly": true
+}
