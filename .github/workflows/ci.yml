@@ -8,9 +8,6 @@ on:
       - "fix/**"
       - "perf/**"
       - "chore/**"
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -20,7 +17,7 @@ concurrency:
 jobs:
   check-build:
     name: Check and build
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
+    runs-on: [self-hosted, Windows, X64, canvas-utilities]
     timeout-minutes: 10
 
     steps:
