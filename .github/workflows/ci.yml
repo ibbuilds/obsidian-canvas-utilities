@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check-build:
     name: Check and build
-    runs-on: [self-hosted, Windows, X64, canvas-utilities]
+    runs-on: [self-hosted, Windows, X64, obsidian-canvas-utilities]
     timeout-minutes: 10
 
     steps:
