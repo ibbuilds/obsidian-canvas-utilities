@@ -6,10 +6,10 @@
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "format": "biome format --write main.ts manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css",
-    "lint": "biome lint main.ts manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css",
+    "format": "biome format --write main.ts src manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css",
+    "lint": "biome lint main.ts src manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css",
     "typecheck": "tsc --noEmit --skipLibCheck",
-    "check": "biome check main.ts manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css && pnpm run typecheck",
+    "check": "biome check main.ts src manifest.json package.json tsconfig.json esbuild.config.mjs biome.json styles.css && pnpm run typecheck",
     "bundle": "node esbuild.config.mjs production",
     "build": "pnpm run check && pnpm run bundle"
   },
