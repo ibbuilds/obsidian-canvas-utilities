@@ -15,6 +15,11 @@ type HttpUrlExtraction = {
   urls: string[];
 };
 
+type ExcalidrawUrlExtraction = {
+  recognized: boolean;
+  urls: string[];
+};
+
 const CARD_SIZES = {
   compact: { width: 800, height: 500 },
   desktop: { width: 1280, height: 800 },
@@ -226,13 +231,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function extractExcalidrawEmbedUrls(text: string): string[] {
+function extractExcalidrawEmbedUrls(text: string): ExcalidrawUrlExtraction {
   let clipboard: unknown;
 
   try {
     clipboard = JSON.parse(text);
   } catch {
-    return [];
+    return { recognized: false, urls: [] };
   }
 
   if (
@@ -240,7 +245,7 @@ function extractExcalidrawEmbedUrls(text: string): string[] {
     clipboard.type !== "excalidraw/clipboard" ||
     !Array.isArray(clipboard.elements)
   ) {
-    return [];
+    return { recognized: false, urls: [] };
   }
 
   const urls = new Set<string>();
@@ -261,7 +266,7 @@ function extractExcalidrawEmbedUrls(text: string): string[] {
     }
   }
 
-  return [...urls];
+  return { recognized: true, urls: [...urls] };
 }
 
 function isEditablePasteTarget(target: EventTarget | null): boolean {
@@ -659,6 +664,20 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
+    const excalidraw = extractExcalidrawEmbedUrls(text);
+
+    if (excalidraw.recognized) {
+      if (excalidraw.urls.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      this.createWebCards(canvas, excalidraw.urls, DEFAULT_CARD_SIZE);
+      return;
+    }
+
     const { validCount, urls } = extractHttpUrls(text);
 
     // Preserve Obsidian's normal behavior unless the clipboard actually
@@ -711,9 +730,9 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    const urls = extractExcalidrawEmbedUrls(text);
+    const { recognized, urls } = extractExcalidrawEmbedUrls(text);
 
-    if (urls.length === 0) {
+    if (!recognized || urls.length === 0) {
       new Notice("Clipboard does not contain valid Excalidraw web embeds");
       return;
     }
