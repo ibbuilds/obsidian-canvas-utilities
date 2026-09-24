@@ -25,7 +25,7 @@ function normalizeHttpUrl(candidate: string): string | null {
 }
 
 export function extractHttpUrls(text: string): HttpUrlExtraction {
-  const matches = text.match(/https?:\\/\\/[^\\s]+/gi) ?? [];
+  const matches = text.match(/https?:\/\/[^\s]+/gi) ?? [];
   const urls = new Set<string>();
   let validCount = 0;
 
