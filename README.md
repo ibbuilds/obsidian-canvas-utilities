@@ -14,7 +14,7 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 - Manual paste commands with compact, desktop, and large-desktop card sizes.
 - Import Excalidraw embeddable links as native Canvas web cards.
 - Match selected nodes to the largest or smallest selected size.
-- Arrange selected nodes as a row, column, or grid.
+- Arrange selected nodes as a row, column, balanced grid, or compact bento layout.
 - Set exact horizontal or vertical gaps between selected nodes.
 
 ## Development
@@ -53,3 +53,5 @@ Obsidian loads `main.js`, `manifest.json`, and `styles.css` from the plugin dire
 ## Scope
 
 Canvas Utilities stays focused on Canvas authoring and workflow helpers. It does not implement thumbnail generation, webview caching, virtualization, or other Canvas performance systems.
+
+Bulk operations have no plugin-side node-count cap. Layout and creation paths avoid large temporary position arrays, use scalable geometry passes, and yield between mutation batches so large selections remain responsive. The practical upper bound is still determined by Obsidian/Electron and the Canvas itself.

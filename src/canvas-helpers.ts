@@ -1,4 +1,4 @@
-import { CARD_GAP, MAX_COLUMNS } from "./constants";
+import { BASE_PASTE_COLUMNS, CARD_GAP } from "./constants";
 import type {
   CanvasLike,
   CanvasNodeDataLike,
@@ -6,6 +6,12 @@ import type {
   CardSize,
   Point,
 } from "./types";
+
+export type GridLayoutMetrics = {
+  columns: number;
+  startX: number;
+  startY: number;
+};
 
 export function isEditablePasteTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -40,29 +46,46 @@ export function getViewportCenter(canvas: CanvasLike): Point | null {
   return canvas.posFromEvt(event);
 }
 
-export function calculateGridLayout(
+export function createPasteGridLayout(
   count: number,
   origin: Point,
   size: CardSize,
-): Point[] {
-  const columns = Math.min(count, MAX_COLUMNS);
-  const rows = Math.ceil(count / columns);
+): GridLayoutMetrics {
+  if (count <= 0) {
+    return {
+      columns: 1,
+      startX: origin.x,
+      startY: origin.y,
+    };
+  }
 
+  const columns = Math.min(
+    count,
+    Math.max(BASE_PASTE_COLUMNS, Math.ceil(Math.sqrt(count))),
+  );
+  const rows = Math.ceil(count / columns);
   const gridWidth = columns * size.width + (columns - 1) * CARD_GAP;
   const gridHeight = rows * size.height + (rows - 1) * CARD_GAP;
 
-  const startX = origin.x - gridWidth / 2;
-  const startY = origin.y - gridHeight / 2;
+  return {
+    columns,
+    startX: origin.x - gridWidth / 2,
+    startY: origin.y - gridHeight / 2,
+  };
+}
 
-  return Array.from({ length: count }, (_, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
+export function getGridPosition(
+  index: number,
+  layout: GridLayoutMetrics,
+  size: CardSize,
+): Point {
+  const column = index % layout.columns;
+  const row = Math.floor(index / layout.columns);
 
-    return {
-      x: startX + column * (size.width + CARD_GAP),
-      y: startY + row * (size.height + CARD_GAP),
-    };
-  });
+  return {
+    x: layout.startX + column * (size.width + CARD_GAP),
+    y: layout.startY + row * (size.height + CARD_GAP),
+  };
 }
 
 export function getSelectedNodes(canvas: CanvasLike): CanvasNodeLike[] {
@@ -73,16 +96,35 @@ export function getSelectedNodes(canvas: CanvasLike): CanvasNodeLike[] {
     return [];
   }
 
-  return selectionData.nodes
-    .map((nodeData) => nodes.get(nodeData.id))
-    .filter((node): node is CanvasNodeLike => node !== undefined);
+  const selectedNodes: CanvasNodeLike[] = [];
+
+  for (const nodeData of selectionData.nodes) {
+    const node = nodes.get(nodeData.id);
+
+    if (node) {
+      selectedNodes.push(node);
+    }
+  }
+
+  return selectedNodes;
 }
 
-export function getSelectionCenter(nodes: CanvasNodeLike[]): Point {
-  const minX = Math.min(...nodes.map((node) => node.x));
-  const minY = Math.min(...nodes.map((node) => node.y));
-  const maxX = Math.max(...nodes.map((node) => node.x + node.width));
-  const maxY = Math.max(...nodes.map((node) => node.y + node.height));
+export function getSelectionCenter(nodes: readonly CanvasNodeLike[]): Point {
+  if (nodes.length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
+  }
 
   return {
     x: (minX + maxX) / 2,
@@ -93,7 +135,7 @@ export function getSelectionCenter(nodes: CanvasNodeLike[]): Point {
 export function sortNodesReadingOrder(
   nodes: CanvasNodeLike[],
 ): CanvasNodeLike[] {
-  return [...nodes].sort((a, b) => {
+  return nodes.sort((a, b) => {
     const verticalDifference = a.y - b.y;
 
     if (Math.abs(verticalDifference) > Math.min(a.height, b.height) / 2) {
