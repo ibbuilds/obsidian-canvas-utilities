@@ -31,9 +31,7 @@ function getBalancedColumnCount(nodes: readonly CanvasNodeLike[]): number {
   const averageWidth = Math.max(totalWidth / nodes.length, 1);
   const averageHeight = Math.max(totalHeight / nodes.length, 1);
   const rawColumns = Math.sqrt(
-    nodes.length *
-      LAYOUT_TARGET_ASPECT_RATIO *
-      (averageHeight / averageWidth),
+    nodes.length * LAYOUT_TARGET_ASPECT_RATIO * (averageHeight / averageWidth),
   );
 
   return Math.min(nodes.length, Math.max(1, Math.ceil(rawColumns)));
