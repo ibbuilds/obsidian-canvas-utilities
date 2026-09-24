@@ -11,9 +11,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.13
         version: 2.5.13
-      '@biomejs/cli-win32-x64':
-        specifier: 2.5.13
-        version: 2.5.13
       '@types/node':
         specifier: ^22.20.2
         version: 22.20.2
@@ -455,7 +452,8 @@ snapshots:
   '@biomejs/cli-win32-arm64@2.5.13':
     optional: true
 
-  '@biomejs/cli-win32-x64@2.5.13': {}
+  '@biomejs/cli-win32-x64@2.5.13':
+    optional: true
 
   '@codemirror/state@6.5.0':
     dependencies:
