@@ -8,6 +8,7 @@ on:
       - "fix/**"
       - "perf/**"
       - "chore/**"
+      - "refactor/**"
   workflow_dispatch:
 
 concurrency:
@@ -29,33 +30,7 @@ jobs:
         run: |
           $utf8 = [System.Text.UTF8Encoding]::new($false)
           $files = git ls-files | Where-Object {
-            $_ -match '\\.(ts|mjs|json|css|md|ya?ml)
-            $text = [System.IO.File]::ReadAllText($file)
-            $text = $text.Replace("`r`n", "`n").Replace("`r", "`n")
-            [System.IO.File]::WriteAllText($file, $text, $utf8)
-          }
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-          run_install: false
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check
-        run: pnpm run check
-
-      - name: Bundle
-        run: pnpm run bundle
- -or
+            $_ -match '\.(ts|mjs|json|css|md|ya?ml)$' -or
             $_ -in @(".gitignore", ".gitattributes", ".editorconfig")
           }
 
