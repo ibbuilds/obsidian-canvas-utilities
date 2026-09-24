@@ -19,16 +19,30 @@ jobs:
     name: Check and build
     runs-on: [self-hosted, Windows, X64, obsidian-canvas-utilities]
     timeout-minutes: 10
-    env:
-      GIT_CONFIG_COUNT: "2"
-      GIT_CONFIG_KEY_0: core.autocrlf
-      GIT_CONFIG_VALUE_0: "false"
-      GIT_CONFIG_KEY_1: core.eol
-      GIT_CONFIG_VALUE_1: lf
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Normalize checkout line endings
+        shell: pwsh
+        run: |
+          $utf8 = [System.Text.UTF8Encoding]::new($false)
+          $files = @(
+            "main.ts",
+            "manifest.json",
+            "package.json",
+            "tsconfig.json",
+            "esbuild.config.mjs",
+            "biome.json",
+            "styles.css"
+          )
+
+          foreach ($file in $files) {
+            $text = [System.IO.File]::ReadAllText($file)
+            $text = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+            [System.IO.File]::WriteAllText($file, $text, $utf8)
+          }
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
