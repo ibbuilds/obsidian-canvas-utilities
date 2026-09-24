@@ -12,14 +12,16 @@ import {
   type GapDirection,
   matchNodeSizes,
   type SelectionLayout,
-  setNodeGap,
   type SizeMatchMode,
+  setNodeGap,
 } from "./src/selection";
-import type { CanvasLike, CanvasNodeLike, CanvasViewLike, CardSize } from "./src/types";
-import {
-  extractExcalidrawEmbedUrls,
-  extractHttpUrls,
-} from "./src/urls";
+import type {
+  CanvasLike,
+  CanvasNodeLike,
+  CanvasViewLike,
+  CardSize,
+} from "./src/types";
+import { extractExcalidrawEmbedUrls, extractHttpUrls } from "./src/urls";
 
 export default class CanvasUtilitiesPlugin extends Plugin {
   private readonly registeredCanvasWrappers = new WeakSet<HTMLElement>();

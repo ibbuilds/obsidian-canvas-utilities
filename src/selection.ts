@@ -1,9 +1,9 @@
-import { CARD_GAP, MAX_COLUMNS } from "./constants";
 import {
   getSelectionCenter,
   sortNodesReadingOrder,
   updateNodeGeometry,
 } from "./canvas-helpers";
+import { CARD_GAP, MAX_COLUMNS } from "./constants";
 import type { CanvasNodeLike } from "./types";
 
 export type SizeMatchMode = "largest" | "smallest";
@@ -106,8 +106,7 @@ export function arrangeNodes(
     columnWidths.reduce((sum, width) => sum + width, 0) +
     CARD_GAP * (columns - 1);
   const gridHeight =
-    rowHeights.reduce((sum, height) => sum + height, 0) +
-    CARD_GAP * (rows - 1);
+    rowHeights.reduce((sum, height) => sum + height, 0) + CARD_GAP * (rows - 1);
 
   const columnOffsets: number[] = [];
   const rowOffsets: number[] = [];

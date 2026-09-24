@@ -106,9 +106,7 @@ export function sortNodesReadingOrder(
 
 export function updateNodeGeometry(
   node: CanvasNodeLike,
-  geometry: Partial<
-    Pick<CanvasNodeDataLike, "x" | "y" | "width" | "height">
-  >,
+  geometry: Partial<Pick<CanvasNodeDataLike, "x" | "y" | "width" | "height">>,
 ): void {
   node.setData(
     {
