@@ -51,8 +51,16 @@ export function createPasteGridLayout(
   origin: Point,
   size: CardSize,
 ): GridLayoutMetrics {
+  if (count <= 0) {
+    return {
+      columns: 1,
+      startX: origin.x,
+      startY: origin.y,
+    };
+  }
+
   const columns = Math.min(
-    Math.max(count, 1),
+    count,
     Math.max(BASE_PASTE_COLUMNS, Math.ceil(Math.sqrt(count))),
   );
   const rows = Math.ceil(count / columns);
