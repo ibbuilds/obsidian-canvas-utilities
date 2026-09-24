@@ -12,6 +12,10 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 - Ignore paste events inside existing nodes, editors, inputs, and other editable UI.
 - Arrange bulk-pasted cards in a centered grid.
 - Manual paste commands with compact, desktop, and large-desktop card sizes.
+- Import Excalidraw embeddable links as native Canvas web cards.
+- Match selected nodes to the largest or smallest selected size.
+- Arrange selected nodes as a row, column, or grid.
+- Set exact horizontal or vertical gaps between selected nodes.
 
 ## Development
 
