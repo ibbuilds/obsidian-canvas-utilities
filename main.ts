@@ -578,10 +578,8 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    new GapModal(
-      this.app,
-      `Set ${direction} gap`,
-      (gap) => this.setSelectionGap(selection.canvas, selection.nodes, direction, gap),
+    new GapModal(this.app, `Set ${direction} gap`, (gap) =>
+      this.setSelectionGap(selection.canvas, selection.nodes, direction, gap),
     ).open();
   }
 
