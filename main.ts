@@ -1,8 +1,18 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, type WorkspaceLeaf } from "obsidian";
+
+type Point = {
+  x: number;
+  y: number;
+};
 
 type CardSize = {
   width: number;
   height: number;
+};
+
+type HttpUrlExtraction = {
+  validCount: number;
+  urls: string[];
 };
 
 const CARD_SIZES = {
@@ -16,14 +26,8 @@ const CARD_GAP = 60;
 const MAX_COLUMNS = 4;
 
 type CanvasLinkNodeOptions = {
-  pos: {
-    x: number;
-    y: number;
-  };
-  size: {
-    width: number;
-    height: number;
-  };
+  pos: Point;
+  size: CardSize;
   position: "center";
   url: string;
   save: boolean;
@@ -32,10 +36,7 @@ type CanvasLinkNodeOptions = {
 
 type CanvasLike = {
   wrapperEl: HTMLElement;
-  posFromEvt?(event: MouseEvent): {
-    x: number;
-    y: number;
-  };
+  posFromEvt?(event: MouseEvent): Point;
   createLinkNode(options: CanvasLinkNodeOptions): unknown;
   requestSave(immediate?: boolean): void;
 };
@@ -45,25 +46,42 @@ type CanvasViewLike = {
   canvas?: CanvasLike;
 };
 
-function extractHttpUrls(text: string): string[] {
+function normalizeHttpUrl(candidate: string): string | null {
+  const cleaned = candidate.replace(/[),.;]+$/g, "");
+
+  try {
+    const url = new URL(cleaned);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function extractHttpUrls(text: string): HttpUrlExtraction {
   const matches = text.match(/https?:\/\/[^\s]+/gi) ?? [];
   const urls = new Set<string>();
+  let validCount = 0;
 
   for (const match of matches) {
-    const cleaned = match.replace(/[),.;]+$/g, "");
+    const url = normalizeHttpUrl(match);
 
-    try {
-      const url = new URL(cleaned);
-
-      if (url.protocol === "http:" || url.protocol === "https:") {
-        urls.add(url.href);
-      }
-    } catch {
-      // Ignore malformed URLs.
+    if (!url) {
+      continue;
     }
+
+    validCount += 1;
+    urls.add(url);
   }
 
-  return [...urls];
+  return {
+    validCount,
+    urls: [...urls],
+  };
 }
 
 function isEditablePasteTarget(target: EventTarget | null): boolean {
@@ -84,7 +102,11 @@ function isEditablePasteTarget(target: EventTarget | null): boolean {
   );
 }
 
-function getViewportCenter(canvas: CanvasLike): { x: number; y: number } {
+function getViewportCenter(canvas: CanvasLike): Point | null {
+  if (!canvas.posFromEvt) {
+    return null;
+  }
+
   const rect = canvas.wrapperEl.getBoundingClientRect();
 
   const event = new MouseEvent("mousemove", {
@@ -92,14 +114,14 @@ function getViewportCenter(canvas: CanvasLike): { x: number; y: number } {
     clientY: rect.top + rect.height / 2,
   });
 
-  return canvas.posFromEvt?.(event) ?? { x: 0, y: 0 };
+  return canvas.posFromEvt(event);
 }
 
 function calculateGridLayout(
   count: number,
-  origin: { x: number; y: number },
+  origin: Point,
   size: CardSize,
-): { x: number; y: number }[] {
+): Point[] {
   const columns = Math.min(count, MAX_COLUMNS);
   const rows = Math.ceil(count / columns);
 
@@ -157,7 +179,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     const leaves = this.app.workspace.getLeavesOfType("canvas");
 
     for (const leaf of leaves) {
-      const canvas = (leaf.view as CanvasViewLike).canvas;
+      const canvas = this.getCanvasFromLeaf(leaf);
 
       if (!canvas) {
         continue;
@@ -194,9 +216,11 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    const urls = extractHttpUrls(text);
+    const { validCount, urls } = extractHttpUrls(text);
 
-    if (urls.length < 2) {
+    // Preserve Obsidian's normal behavior unless the clipboard actually
+    // contains two or more valid HTTP(S) URL occurrences.
+    if (validCount < 2) {
       return;
     }
 
@@ -214,8 +238,13 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    const text = await navigator.clipboard.readText();
-    const urls = extractHttpUrls(text);
+    const text = await this.readClipboardText();
+
+    if (text === null) {
+      return;
+    }
+
+    const { urls } = extractHttpUrls(text);
 
     if (urls.length === 0) {
       new Notice("Clipboard does not contain valid URLs");
@@ -225,38 +254,82 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     this.createWebCards(canvas, urls, size);
   }
 
+  private async readClipboardText(): Promise<string | null> {
+    try {
+      return await navigator.clipboard.readText();
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to read clipboard", error);
+      new Notice("Unable to read the clipboard");
+      return null;
+    }
+  }
+
   private createWebCards(
     canvas: CanvasLike,
     urls: string[],
     size: CardSize,
   ): void {
     const origin = getViewportCenter(canvas);
-    const positions = calculateGridLayout(urls.length, origin, size);
 
-    for (const [index, url] of urls.entries()) {
-      canvas.createLinkNode({
-        pos: positions[index],
-        size: {
-          width: size.width,
-          height: size.height,
-        },
-        position: "center",
-        url,
-        save: false,
-        focus: false,
-      });
+    if (!origin) {
+      new Notice("Unable to determine the Canvas viewport");
+      return;
     }
 
-    canvas.requestSave(false);
+    const positions = calculateGridLayout(urls.length, origin, size);
+    let createdCount = 0;
+
+    try {
+      for (const [index, url] of urls.entries()) {
+        canvas.createLinkNode({
+          pos: positions[index],
+          size,
+          position: "center",
+          url,
+          save: false,
+          focus: false,
+        });
+
+        createdCount += 1;
+      }
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to create web cards", error);
+      new Notice("Failed to create all web cards");
+    } finally {
+      if (createdCount > 0) {
+        try {
+          canvas.requestSave(false);
+        } catch (error) {
+          console.error("[Canvas Utilities] Failed to save Canvas", error);
+          new Notice("Failed to save the Canvas");
+        }
+      }
+    }
   }
 
-  private getActiveCanvas(): CanvasLike | null {
-    const leaf = this.app.workspace.getMostRecentLeaf();
-
+  private getCanvasFromLeaf(leaf: WorkspaceLeaf | null): CanvasLike | null {
     if (leaf?.view.getViewType() !== "canvas") {
       return null;
     }
 
     return (leaf.view as CanvasViewLike).canvas ?? null;
+  }
+
+  private getActiveCanvas(): CanvasLike | null {
+    const recentCanvas = this.getCanvasFromLeaf(
+      this.app.workspace.getMostRecentLeaf(),
+    );
+
+    if (recentCanvas) {
+      return recentCanvas;
+    }
+
+    const canvasLeaves = this.app.workspace.getLeavesOfType("canvas");
+
+    if (canvasLeaves.length !== 1) {
+      return null;
+    }
+
+    return this.getCanvasFromLeaf(canvasLeaves[0]);
   }
 }
