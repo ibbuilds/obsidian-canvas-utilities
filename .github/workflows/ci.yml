@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Normalize checkout line endings
-        shell: pwsh
+        shell: powershell
         run: |
           $utf8 = [System.Text.UTF8Encoding]::new($false)
           $files = @(
