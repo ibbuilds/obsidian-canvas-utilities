@@ -1,12 +1,18 @@
 import { Notice, Plugin, type WorkspaceLeaf } from "obsidian";
 import {
-  calculateGridLayout,
+  createPasteGridLayout,
+  getGridPosition,
   getSelectedNodes,
   getViewportCenter,
   isEditablePasteTarget,
 } from "./src/canvas-helpers";
-import { CARD_SIZES, DEFAULT_CARD_SIZE } from "./src/constants";
+import {
+  CARD_SIZES,
+  DEFAULT_CARD_SIZE,
+  WEB_CARD_BATCH_SIZE,
+} from "./src/constants";
 import GapModal from "./src/gap-modal";
+import { yieldToUi } from "./src/scheduler";
 import {
   arrangeNodes,
   type GapDirection,
@@ -54,31 +60,37 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     this.addCommand({
       id: "match-selected-node-size-largest",
       name: "Match selected node size — Largest",
-      callback: () => this.matchSelectedNodeSize("largest"),
+      callback: () => void this.matchSelectedNodeSize("largest"),
     });
 
     this.addCommand({
       id: "match-selected-node-size-smallest",
       name: "Match selected node size — Smallest",
-      callback: () => this.matchSelectedNodeSize("smallest"),
+      callback: () => void this.matchSelectedNodeSize("smallest"),
     });
 
     this.addCommand({
       id: "arrange-selected-nodes-row",
       name: "Arrange selected nodes — Row",
-      callback: () => this.arrangeSelectedNodes("row"),
+      callback: () => void this.arrangeSelectedNodes("row"),
     });
 
     this.addCommand({
       id: "arrange-selected-nodes-column",
       name: "Arrange selected nodes — Column",
-      callback: () => this.arrangeSelectedNodes("column"),
+      callback: () => void this.arrangeSelectedNodes("column"),
     });
 
     this.addCommand({
       id: "arrange-selected-nodes-grid",
       name: "Arrange selected nodes — Grid",
-      callback: () => this.arrangeSelectedNodes("grid"),
+      callback: () => void this.arrangeSelectedNodes("grid"),
+    });
+
+    this.addCommand({
+      id: "arrange-selected-nodes-bento",
+      name: "Arrange selected nodes — Bento",
+      callback: () => void this.arrangeSelectedNodes("bento"),
     });
 
     this.addCommand({
@@ -140,25 +152,25 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     canvas.requestSave(false);
   }
 
-  private matchSelectedNodeSize(mode: SizeMatchMode): void {
+  private async matchSelectedNodeSize(mode: SizeMatchMode): Promise<void> {
     const selection = this.getMutableSelectedNodes();
 
     if (!selection) {
       return;
     }
 
-    matchNodeSizes(selection.nodes, mode);
+    await matchNodeSizes(selection.nodes, mode);
     this.commitNodeMutation(selection.canvas);
   }
 
-  private arrangeSelectedNodes(layout: SelectionLayout): void {
+  private async arrangeSelectedNodes(layout: SelectionLayout): Promise<void> {
     const selection = this.getMutableSelectedNodes();
 
     if (!selection) {
       return;
     }
 
-    arrangeNodes(selection.nodes, layout);
+    await arrangeNodes(selection.nodes, layout);
     this.commitNodeMutation(selection.canvas);
   }
 
@@ -170,9 +182,17 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
 
     new GapModal(this.app, `Set ${direction} gap`, (gap) => {
-      setNodeGap(selection.nodes, direction, gap);
-      this.commitNodeMutation(selection.canvas);
+      void this.applySelectionGap(selection, direction, gap);
     }).open();
+  }
+
+  private async applySelectionGap(
+    selection: { canvas: CanvasLike; nodes: CanvasNodeLike[] },
+    direction: GapDirection,
+    gap: number,
+  ): Promise<void> {
+    await setNodeGap(selection.nodes, direction, gap);
+    this.commitNodeMutation(selection.canvas);
   }
 
   private registerCanvasPasteHandlers(): void {
@@ -226,7 +246,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      this.createWebCards(canvas, excalidraw.urls, DEFAULT_CARD_SIZE);
+      void this.createWebCards(canvas, excalidraw.urls, DEFAULT_CARD_SIZE);
       return;
     }
 
@@ -239,7 +259,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
+    void this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
   }
 
   private async pasteClipboardUrls(size: CardSize): Promise<void> {
@@ -263,7 +283,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    this.createWebCards(canvas, urls, size);
+    await this.createWebCards(canvas, urls, size);
   }
 
   private async pasteExcalidrawEmbedsAsWebCards(): Promise<void> {
@@ -287,7 +307,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
+    await this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
   }
 
   private async readClipboardText(): Promise<string | null> {
@@ -300,11 +320,11 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
   }
 
-  private createWebCards(
+  private async createWebCards(
     canvas: CanvasLike,
     urls: string[],
     size: CardSize,
-  ): void {
+  ): Promise<void> {
     const origin = getViewportCenter(canvas);
 
     if (!origin) {
@@ -312,21 +332,28 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    const positions = calculateGridLayout(urls.length, origin, size);
+    const layout = createPasteGridLayout(urls.length, origin, size);
     let createdCount = 0;
 
     try {
-      for (const [index, url] of urls.entries()) {
+      for (let index = 0; index < urls.length; index += 1) {
         canvas.createLinkNode({
-          pos: positions[index],
+          pos: getGridPosition(index, layout, size),
           size,
           position: "center",
-          url,
+          url: urls[index],
           save: false,
           focus: false,
         });
 
         createdCount += 1;
+
+        if (
+          createdCount % WEB_CARD_BATCH_SIZE === 0 &&
+          createdCount < urls.length
+        ) {
+          await yieldToUi();
+        }
       }
     } catch (error) {
       console.error("[Canvas Utilities] Failed to create web cards", error);

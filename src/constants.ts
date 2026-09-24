@@ -8,4 +8,7 @@ export const CARD_SIZES = {
 
 export const DEFAULT_CARD_SIZE = CARD_SIZES.desktop;
 export const CARD_GAP = 60;
-export const MAX_COLUMNS = 4;
+export const BASE_PASTE_COLUMNS = 4;
+export const LAYOUT_TARGET_ASPECT_RATIO = 1.6;
+export const WEB_CARD_BATCH_SIZE = 100;
+export const NODE_MUTATION_BATCH_SIZE = 200;

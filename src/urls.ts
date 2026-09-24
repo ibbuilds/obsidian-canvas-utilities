@@ -25,19 +25,20 @@ function normalizeHttpUrl(candidate: string): string | null {
 }
 
 export function extractHttpUrls(text: string): HttpUrlExtraction {
-  const matches = text.match(/https?:\/\/[^\s]+/gi) ?? [];
+  const pattern = /https?:\/\/[^\s]+/gi;
   const urls = new Set<string>();
   let validCount = 0;
+  let match = pattern.exec(text);
 
-  for (const match of matches) {
-    const url = normalizeHttpUrl(match);
+  while (match) {
+    const url = normalizeHttpUrl(match[0]);
 
-    if (!url) {
-      continue;
+    if (url) {
+      validCount += 1;
+      urls.add(url);
     }
 
-    validCount += 1;
-    urls.add(url);
+    match = pattern.exec(text);
   }
 
   return {
