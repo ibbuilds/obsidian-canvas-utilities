@@ -84,6 +84,48 @@ function extractHttpUrls(text: string): HttpUrlExtraction {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractExcalidrawEmbedUrls(text: string): string[] {
+  let clipboard: unknown;
+
+  try {
+    clipboard = JSON.parse(text);
+  } catch {
+    return [];
+  }
+
+  if (
+    !isRecord(clipboard) ||
+    clipboard.type !== "excalidraw/clipboard" ||
+    !Array.isArray(clipboard.elements)
+  ) {
+    return [];
+  }
+
+  const urls = new Set<string>();
+
+  for (const element of clipboard.elements) {
+    if (
+      !isRecord(element) ||
+      element.type !== "embeddable" ||
+      typeof element.link !== "string"
+    ) {
+      continue;
+    }
+
+    const url = normalizeHttpUrl(element.link);
+
+    if (url) {
+      urls.add(url);
+    }
+  }
+
+  return [...urls];
+}
+
 function isEditablePasteTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
@@ -150,6 +192,12 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       id: "paste-urls-as-web-cards",
       name: "Paste URLs as web cards",
       callback: () => this.pasteClipboardUrls(CARD_SIZES.desktop),
+    });
+
+    this.addCommand({
+      id: "paste-excalidraw-embeds-as-web-cards",
+      name: "Paste Excalidraw embeds as web cards",
+      callback: () => this.pasteExcalidrawEmbedsAsWebCards(),
     });
 
     this.addCommand({
@@ -252,6 +300,30 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
 
     this.createWebCards(canvas, urls, size);
+  }
+
+  private async pasteExcalidrawEmbedsAsWebCards(): Promise<void> {
+    const canvas = this.getActiveCanvas();
+
+    if (!canvas) {
+      new Notice("Open a Canvas first");
+      return;
+    }
+
+    const text = await this.readClipboardText();
+
+    if (text === null) {
+      return;
+    }
+
+    const urls = extractExcalidrawEmbedUrls(text);
+
+    if (urls.length === 0) {
+      new Notice("Clipboard does not contain valid Excalidraw web embeds");
+      return;
+    }
+
+    this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
   }
 
   private async readClipboardText(): Promise<string | null> {
