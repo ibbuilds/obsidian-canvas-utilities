@@ -7,9 +7,10 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 ## Features
 
 - Paste 2+ HTTP/HTTPS URLs directly onto empty Canvas space.
-- Automatically build a structured bento grid instead of a loose moodboard.
+- Automatically build a compact adaptive bento grid instead of a loose moodboard or masonry layout.
 - Use 800 × 500 as the minimum web-card tile size.
-- Create larger 2×2 feature cards on the same underlying grid while keeping all other cards at the 800 × 500 minimum.
+- Mix 1×1, 2×1, 1×2, 3×1, 1×3, 2×2, 3×2, and 2×3 spans on the same underlying grid.
+- Prefer a slightly portrait overall composition instead of an ultra-wide strip.
 - Keep every inter-card gap on a 4-point spacing system.
 - Create only native Canvas link/web cards.
 - Preserve Obsidian's normal single-URL paste behavior.
@@ -17,7 +18,7 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 - Import Excalidraw embeddable links into the same bento grid.
 - Automatically select newly pasted cards so they can be adjusted immediately.
 - Use a minimal contextual toolbar inside the native Canvas selection menu.
-- Arrange selected web cards as a structured bento grid, even grid, row, or column.
+- Arrange selected web cards as bento, even grid, row, or column.
 - Align selections left, center, right, top, middle, or bottom.
 - Distribute selections horizontally or vertically.
 - Resize selections to Small, Medium, Large, or Hero web-card presets.
@@ -28,7 +29,7 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 
 ## Bento grid
 
-Automatic multi-URL paste uses a deterministic modular bento system.
+Automatic multi-URL paste uses a deterministic adaptive bento system.
 
 The base tile is:
 
@@ -36,17 +37,22 @@ The base tile is:
 800 × 500
 ```
 
-The automatic layout is a single, hole-free modular bento grid, not a moodboard or masonry layout.
+Every card occupies one or more integer cells on one shared lattice. The allowed spans are:
 
-The underlying grid is always two rows high and expands horizontally. Cards use integer spans on the same lattice:
+```text
+1×1  small
+2×1  wide
+1×2  tall
+3×1  panoramic accent
+1×3  vertical accent
+2×2  hero
+3×2  wide hero
+2×3  tall hero
+```
 
-- Small: 1 × 1 base cell — 800 × 500.
-- Wide: 2 × 1 base cells — 1664 × 500.
-- Hero: 2 × 2 base cells — 1664 × 1064.
+The planner first chooses a global grid whose physical aspect ratio targets a slightly portrait composition rather than a horizontal strip. It then divides that grid into bounded 3×3-or-smaller macro blocks. Each macro block is tiled exactly, with no overlap and no empty cells, using a deterministic mix of the allowed spans.
 
-Five-card modules exactly fill a 4 × 2 region. Several module variants alternate hero, wide, and small cards so the composition has hierarchy without breaking the grid. The final 1–4 cards use exact partial modules that also fill their rectangular region completely.
-
-There are no intentional holes and no independent free-form packing. Every card is placed from its top-left grid coordinate, every edge aligns to the same row/column lattice, and every inter-card gap is identical.
+Card density intentionally varies between neighboring macro blocks. This creates visual hierarchy: some regions use larger feature cards while adjacent regions use more supporting cards. The whole result still forms one continuous rectangular bento grid.
 
 The default card gap is:
 
@@ -127,4 +133,4 @@ Obsidian loads `main.js`, `manifest.json`, and `styles.css` from the plugin dire
 
 Canvas Utilities stays focused on Canvas authoring and workflow helpers. It does not implement thumbnail generation, webview caching, virtualization, or other Canvas performance systems.
 
-Bulk operations have no plugin-side node-count cap. The bento planner is deterministic and linear in the number of cards, layout mutations are batched, and long operations yield to the UI so large selections remain responsive. The practical upper bound is still determined by Obsidian/Electron and the Canvas itself.
+Bulk operations have no plugin-side node-count cap. The bento planner uses bounded local exact tiling, cached 3×3-or-smaller pattern generation, dynamic programming for card allocation, batched mutations, and UI yielding so large selections remain responsive. The practical upper bound is still determined by Obsidian/Electron and the Canvas itself.
