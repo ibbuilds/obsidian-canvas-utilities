@@ -9,7 +9,7 @@ Canvas Utilities is intentionally separate from [Canvas Web Optimizer](https://g
 - Paste 2+ HTTP/HTTPS URLs directly onto empty Canvas space.
 - Automatically build a structured bento grid instead of a loose moodboard.
 - Use 800 × 500 as the minimum web-card tile size.
-- Create larger wide and hero cards by spanning the same underlying bento grid.
+- Create larger 2×2 feature cards on the same underlying grid while keeping all other cards at the 800 × 500 minimum.
 - Keep every inter-card gap on a 4-point spacing system.
 - Create only native Canvas link/web cards.
 - Preserve Obsidian's normal single-URL paste behavior.
@@ -36,7 +36,14 @@ The base tile is:
 800 × 500
 ```
 
-Larger cards span multiple base cells. The layout alternates mirrored blocks so large cards do not always accumulate on the same side. Cards remain aligned to shared rows and columns rather than being independently packed.
+The automatic layout is a real modular bento grid, not a moodboard. It uses two-row bento bands built from only two tile classes:
+
+- minimum cards: 800 × 500;
+- feature cards: 2 × 2 base cells.
+
+Feature cards are distributed across each band instead of being clustered together. Additional content expands horizontally first; for very large sets, the planner adds another two-row band while maintaining the same global column grid. Alternating bands anchor from opposite sides so the composition stays balanced without breaking alignment.
+
+Every card starts on the same underlying row/column lattice and every gap is identical.
 
 The default card gap is:
 
