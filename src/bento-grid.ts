@@ -1,12 +1,16 @@
 import { CARD_GAP, CARD_SIZES, snapCoordinate } from "./constants";
 import type { CardSize, Point } from "./types";
 
-type BentoModule = "hero" | "small-column";
+type BentoPlacement = {
+  column: number;
+  row: number;
+  columnSpan: number;
+  rowSpan: number;
+};
 
-type BentoBandPlan = {
-  cardCount: number;
+type BentoModule = {
   columns: number;
-  modules: BentoModule[];
+  placements: BentoPlacement[];
 };
 
 export type BentoTile = {
@@ -21,7 +25,82 @@ export type BentoGridPlan = {
 };
 
 const BASE_TILE = CARD_SIZES.compact;
-const TARGET_CARDS_PER_ASPECT_UNIT = 6;
+const FULL_MODULE_CARD_COUNT = 5;
+const GRID_ROWS = 2;
+
+const FULL_MODULES: BentoModule[] = [
+  {
+    columns: 4,
+    placements: [
+      { column: 0, row: 0, columnSpan: 2, rowSpan: 2 },
+      { column: 2, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 3, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 2, row: 1, columnSpan: 1, rowSpan: 1 },
+      { column: 3, row: 1, columnSpan: 1, rowSpan: 1 },
+    ],
+  },
+  {
+    columns: 4,
+    placements: [
+      { column: 0, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 2, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 0, row: 1, columnSpan: 2, rowSpan: 1 },
+      { column: 2, row: 1, columnSpan: 1, rowSpan: 1 },
+      { column: 3, row: 1, columnSpan: 1, rowSpan: 1 },
+    ],
+  },
+  {
+    columns: 4,
+    placements: [
+      { column: 0, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 1, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 2, row: 0, columnSpan: 2, rowSpan: 2 },
+      { column: 0, row: 1, columnSpan: 1, rowSpan: 1 },
+      { column: 1, row: 1, columnSpan: 1, rowSpan: 1 },
+    ],
+  },
+  {
+    columns: 4,
+    placements: [
+      { column: 0, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 1, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 2, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 0, row: 1, columnSpan: 2, rowSpan: 1 },
+      { column: 2, row: 1, columnSpan: 2, rowSpan: 1 },
+    ],
+  },
+];
+
+const PARTIAL_MODULES: Record<number, BentoModule> = {
+  1: {
+    columns: 2,
+    placements: [{ column: 0, row: 0, columnSpan: 2, rowSpan: 2 }],
+  },
+  2: {
+    columns: 2,
+    placements: [
+      { column: 0, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 0, row: 1, columnSpan: 2, rowSpan: 1 },
+    ],
+  },
+  3: {
+    columns: 2,
+    placements: [
+      { column: 0, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 0, row: 1, columnSpan: 1, rowSpan: 1 },
+      { column: 1, row: 1, columnSpan: 1, rowSpan: 1 },
+    ],
+  },
+  4: {
+    columns: 3,
+    placements: [
+      { column: 0, row: 0, columnSpan: 2, rowSpan: 1 },
+      { column: 2, row: 0, columnSpan: 1, rowSpan: 1 },
+      { column: 0, row: 1, columnSpan: 1, rowSpan: 1 },
+      { column: 1, row: 1, columnSpan: 2, rowSpan: 1 },
+    ],
+  },
+};
 
 function getSpanSize(columnSpan: number, rowSpan: number): CardSize {
   return {
@@ -30,79 +109,20 @@ function getSpanSize(columnSpan: number, rowSpan: number): CardSize {
   };
 }
 
-function getBandCount(cardCount: number): number {
-  return Math.max(
-    1,
-    Math.round(Math.sqrt(cardCount / TARGET_CARDS_PER_ASPECT_UNIT)),
-  );
-}
+function getModules(count: number): BentoModule[] {
+  const modules: BentoModule[] = [];
+  const fullModuleCount = Math.floor(count / FULL_MODULE_CARD_COUNT);
+  const remainder = count % FULL_MODULE_CARD_COUNT;
 
-function getHeroCount(cardCount: number): number {
-  if (cardCount <= 2) {
-    return 0;
+  for (let index = 0; index < fullModuleCount; index += 1) {
+    modules.push(FULL_MODULES[index % FULL_MODULES.length]);
   }
 
-  let heroCount = Math.max(1, Math.round(cardCount / 6));
-
-  if (heroCount % 2 !== cardCount % 2) {
-    heroCount += 1;
+  if (remainder > 0) {
+    modules.push(PARTIAL_MODULES[remainder]);
   }
 
-  if (heroCount > cardCount) {
-    heroCount -= 2;
-  }
-
-  return Math.max(0, heroCount);
-}
-
-function getHeroSlots(moduleCount: number, heroCount: number): Set<number> {
-  const slots = new Set<number>();
-
-  for (let index = 0; index < heroCount; index += 1) {
-    const slot = Math.round(
-      ((index + 1) * (moduleCount + 1)) / (heroCount + 1) - 1,
-    );
-
-    slots.add(Math.max(0, Math.min(moduleCount - 1, slot)));
-  }
-
-  for (let slot = 0; slots.size < heroCount && slot < moduleCount; slot += 1) {
-    slots.add(slot);
-  }
-
-  return slots;
-}
-
-function createBandPlan(cardCount: number, mirrored: boolean): BentoBandPlan {
-  const heroCount = getHeroCount(cardCount);
-  const smallCardCount = cardCount - heroCount;
-  const smallColumnCount = smallCardCount / 2;
-  const moduleCount = heroCount + smallColumnCount;
-  const heroSlots = getHeroSlots(moduleCount, heroCount);
-  const modules = Array.from({ length: moduleCount }, (_, index) =>
-    heroSlots.has(index) ? "hero" : "small-column",
-  );
-
-  if (mirrored) {
-    modules.reverse();
-  }
-
-  return {
-    cardCount,
-    columns: heroCount * 2 + smallColumnCount,
-    modules,
-  };
-}
-
-function createBandCounts(cardCount: number): number[] {
-  const bandCount = Math.min(cardCount, getBandCount(cardCount));
-  const baseCount = Math.floor(cardCount / bandCount);
-  const remainder = cardCount % bandCount;
-
-  return Array.from(
-    { length: bandCount },
-    (_, index) => baseCount + (index < remainder ? 1 : 0),
-  );
+  return modules;
 }
 
 export function createBentoGridPlan(
@@ -117,63 +137,33 @@ export function createBentoGridPlan(
     };
   }
 
-  const bands = createBandCounts(count).map((cardCount, index) =>
-    createBandPlan(cardCount, index % 2 === 1),
-  );
-  const columns = Math.max(...bands.map((band) => band.columns));
-  const rows = bands.length * 2;
-  const gridSize = getSpanSize(columns, rows);
+  const modules = getModules(count);
+  const columns = modules.reduce((sum, module) => sum + module.columns, 0);
+  const gridSize = getSpanSize(columns, GRID_ROWS);
   const startX = snapCoordinate(center.x - gridSize.width / 2);
   const startY = snapCoordinate(center.y - gridSize.height / 2);
   const columnPitch = BASE_TILE.width + CARD_GAP;
   const rowPitch = BASE_TILE.height + CARD_GAP;
-  const heroSize = getSpanSize(2, 2);
   const tiles: BentoTile[] = [];
-  let cardIndex = 0;
+  let columnOffset = 0;
 
-  for (const [bandIndex, band] of bands.entries()) {
-    const bandColumnOffset = bandIndex % 2 === 0 ? 0 : columns - band.columns;
-    let column = bandColumnOffset;
-    const row = bandIndex * 2;
-
-    for (const module of band.modules) {
-      if (module === "hero") {
-        tiles.push({
-          pos: {
-            x: startX + column * columnPitch,
-            y: startY + row * rowPitch,
-          },
-          size: heroSize,
-        });
-
-        cardIndex += 1;
-        column += 2;
-        continue;
-      }
-
-      for (let localRow = 0; localRow < 2; localRow += 1) {
-        if (cardIndex >= count) {
-          break;
-        }
-
-        tiles.push({
-          pos: {
-            x: startX + column * columnPitch,
-            y: startY + (row + localRow) * rowPitch,
-          },
-          size: BASE_TILE,
-        });
-
-        cardIndex += 1;
-      }
-
-      column += 1;
+  for (const module of modules) {
+    for (const placement of module.placements) {
+      tiles.push({
+        pos: {
+          x: startX + (columnOffset + placement.column) * columnPitch,
+          y: startY + placement.row * rowPitch,
+        },
+        size: getSpanSize(placement.columnSpan, placement.rowSpan),
+      });
     }
+
+    columnOffset += module.columns;
   }
 
   return {
     columns,
-    rows,
+    rows: GRID_ROWS,
     tiles,
   };
 }

@@ -331,7 +331,6 @@ export default class CanvasUtilitiesPlugin extends Plugin {
           canvas.createLinkNode({
             pos: tile.pos,
             size: tile.size,
-            position: "center",
             url: urls[index],
             save: false,
             focus: false,
@@ -378,7 +377,6 @@ export default class CanvasUtilitiesPlugin extends Plugin {
           canvas.createLinkNode({
             pos: getGridPosition(index, layout, size),
             size,
-            position: "center",
             url: urls[index],
             save: false,
             focus: false,
