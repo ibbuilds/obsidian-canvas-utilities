@@ -330,6 +330,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
 
     const getSize = (index: number) => getSmartWebCardSize(index, urls.length);
     const plan = createMoodboardPlan(urls.length, origin, getSize);
+    const before = canvas.getData?.();
     const createdNodes: CanvasNodeLike[] = [];
     let rowIndex = 0;
     let x = getMoodboardRowStartX(plan, rowIndex);
@@ -372,7 +373,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       console.error("[Canvas Utilities] Failed to create web cards", error);
       new Notice("Failed to create all web cards");
     } finally {
-      this.finishCreatedNodes(canvas, createdNodes);
+      this.finishCreatedNodes(canvas, createdNodes, before);
       this.emitBatchEvent("end", canvas, "create", createdNodes);
     }
   }
@@ -390,6 +391,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
 
     const layout = createPasteGridLayout(urls.length, origin, size);
+    const before = canvas.getData?.();
     const createdNodes: CanvasNodeLike[] = [];
 
     this.emitBatchEvent("start", canvas, "create");
@@ -418,7 +420,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       console.error("[Canvas Utilities] Failed to create web cards", error);
       new Notice("Failed to create all web cards");
     } finally {
-      this.finishCreatedNodes(canvas, createdNodes);
+      this.finishCreatedNodes(canvas, createdNodes, before);
       this.emitBatchEvent("end", canvas, "create", createdNodes);
     }
   }
@@ -426,12 +428,17 @@ export default class CanvasUtilitiesPlugin extends Plugin {
   private finishCreatedNodes(
     canvas: CanvasLike,
     createdNodes: CanvasNodeLike[],
+    before: unknown,
   ): void {
     if (createdNodes.length === 0) {
       return;
     }
 
     try {
+      if (before !== undefined) {
+        canvas.pushHistory?.(before);
+      }
+
       canvas.requestSave(false);
       this.selectNodes(canvas, createdNodes);
       this.selectionToolbar.refresh(canvas);
