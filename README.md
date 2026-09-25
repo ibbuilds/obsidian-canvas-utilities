@@ -36,14 +36,17 @@ The base tile is:
 800 × 500
 ```
 
-The automatic layout is a real modular bento grid, not a moodboard. It uses two-row bento bands built from only two tile classes:
+The automatic layout is a single, hole-free modular bento grid, not a moodboard or masonry layout.
 
-- minimum cards: 800 × 500;
-- feature cards: 2 × 2 base cells.
+The underlying grid is always two rows high and expands horizontally. Cards use integer spans on the same lattice:
 
-Feature cards are distributed across each band instead of being clustered together. Additional content expands horizontally first; for very large sets, the planner adds another two-row band while maintaining the same global column grid. Alternating bands anchor from opposite sides so the composition stays balanced without breaking alignment.
+- Small: 1 × 1 base cell — 800 × 500.
+- Wide: 2 × 1 base cells — 1664 × 500.
+- Hero: 2 × 2 base cells — 1664 × 1064.
 
-Every card starts on the same underlying row/column lattice and every gap is identical.
+Five-card modules exactly fill a 4 × 2 region. Several module variants alternate hero, wide, and small cards so the composition has hierarchy without breaking the grid. The final 1–4 cards use exact partial modules that also fill their rectangular region completely.
+
+There are no intentional holes and no independent free-form packing. Every card is placed from its top-left grid coordinate, every edge aligns to the same row/column lattice, and every inter-card gap is identical.
 
 The default card gap is:
 
