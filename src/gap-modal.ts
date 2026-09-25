@@ -1,9 +1,5 @@
 import { type App, Modal, Notice } from "obsidian";
-import {
-  CARD_GAP,
-  SPACING_UNIT,
-  snapSpacing,
-} from "./constants";
+import { CARD_GAP, SPACING_UNIT, snapSpacing } from "./constants";
 
 export default class GapModal extends Modal {
   constructor(
