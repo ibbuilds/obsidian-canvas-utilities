@@ -22,8 +22,8 @@ import {
 } from "./src/moodboard";
 import { yieldToUi } from "./src/scheduler";
 import {
-  alignNodes,
   type Alignment,
+  alignNodes,
   arrangeNodes,
   type DistributionDirection,
   distributeNodes,
@@ -522,9 +522,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     );
   }
 
-  private setSelectedNodeSizePreset(
-    preset: SmartCardSizeName,
-  ): Promise<void> {
+  private setSelectedNodeSizePreset(preset: SmartCardSizeName): Promise<void> {
     return this.queueSelectionMutation("size-preset", (_canvas, nodes) =>
       setNodeSizePreset(nodes, preset),
     );
@@ -537,9 +535,8 @@ export default class CanvasUtilitiesPlugin extends Plugin {
   }
 
   private alignSelectedNodes(alignment: Alignment): Promise<void> {
-    return this.queueSelectionMutation(
-      `align:${alignment}`,
-      (_canvas, nodes) => alignNodes(nodes, alignment),
+    return this.queueSelectionMutation(`align:${alignment}`, (_canvas, nodes) =>
+      alignNodes(nodes, alignment),
     );
   }
 
@@ -560,9 +557,8 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
 
     new GapModal(this.app, `Set ${direction} gap`, (gap) => {
-      void this.queueSelectionMutation(
-        `gap:${direction}`,
-        (_canvas, nodes) => setNodeGap(nodes, direction, gap),
+      void this.queueSelectionMutation(`gap:${direction}`, (_canvas, nodes) =>
+        setNodeGap(nodes, direction, gap),
       );
     }).open();
   }
@@ -603,14 +599,10 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     reason: string,
     nodes: CanvasNodeLike[] = [],
   ): void {
-    this.app.workspace.trigger(
-      `canvas-utilities:batch-${phase}`,
-      canvas,
-      {
-        reason,
-        nodeIds: nodes.map((node) => node.id),
-      },
-    );
+    this.app.workspace.trigger(`canvas-utilities:batch-${phase}`, canvas, {
+      reason,
+      nodeIds: nodes.map((node) => node.id),
+    });
   }
 
   private emitGeometryChanged(
