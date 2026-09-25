@@ -11,7 +11,6 @@ export type CardSize = {
 export type CanvasLinkNodeOptions = {
   pos: Point;
   size: CardSize;
-  position: "center";
   url: string;
   save: boolean;
   focus: boolean;
