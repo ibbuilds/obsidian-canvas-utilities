@@ -10,7 +10,6 @@ import {
 import {
   CARD_GAP,
   CARD_SIZES,
-  DEFAULT_CARD_SIZE,
   GROUP_PADDING,
   type SmartCardSizeName,
   WEB_CARD_BATCH_SIZE,
