@@ -110,14 +110,8 @@ function getGridCandidates(count: number): GridCandidate[] {
       const size = getGridPixelSize(columns, rows);
       const aspectRatio = size.width / size.height;
       let score =
-        4.5 *
-          Math.abs(
-            Math.log(aspectRatio / BENTO_TARGET_ASPECT_RATIO),
-          ) +
-        0.8 *
-          Math.abs(
-            cellAreaPerCard - BENTO_TARGET_CELL_AREA_PER_CARD,
-          ) +
+        4.5 * Math.abs(Math.log(aspectRatio / BENTO_TARGET_ASPECT_RATIO)) +
+        0.8 * Math.abs(cellAreaPerCard - BENTO_TARGET_CELL_AREA_PER_CARD) +
         0.02 * (columns + rows);
 
       if (aspectRatio > 1.05) {
@@ -189,11 +183,7 @@ function createMacroBlocks(columns: number, rows: number): MacroBlock[] {
   return blocks;
 }
 
-function getMaskBit(
-  column: number,
-  row: number,
-  blockColumns: number,
-): number {
+function getMaskBit(column: number, row: number, blockColumns: number): number {
   return 1 << (row * blockColumns + column);
 }
 
@@ -209,10 +199,7 @@ function generateTilings(columns: number, rows: number): LocalPlacement[][] {
   const fullMask = (1 << cellCount) - 1;
   const results: LocalPlacement[][] = [];
 
-  const search = (
-    occupiedMask: number,
-    placements: LocalPlacement[],
-  ): void => {
+  const search = (occupiedMask: number, placements: LocalPlacement[]): void => {
     if (occupiedMask === fullMask) {
       results.push([...placements]);
       return;
@@ -231,21 +218,14 @@ function generateTilings(columns: number, rows: number): LocalPlacement[][] {
     const startRow = Math.floor(firstEmptyIndex / columns);
 
     for (const span of ALLOWED_SPANS) {
-      if (
-        startColumn + span.columns > columns ||
-        startRow + span.rows > rows
-      ) {
+      if (startColumn + span.columns > columns || startRow + span.rows > rows) {
         continue;
       }
 
       let placementMask = 0;
       let fits = true;
 
-      for (
-        let rowOffset = 0;
-        rowOffset < span.rows && fits;
-        rowOffset += 1
-      ) {
+      for (let rowOffset = 0; rowOffset < span.rows && fits; rowOffset += 1) {
         for (
           let columnOffset = 0;
           columnOffset < span.columns;
@@ -390,13 +370,9 @@ function allocateBlockCardCounts(
       block.rows *
       BLOCK_DENSITY_WEIGHTS[index % BLOCK_DENSITY_WEIGHTS.length],
   );
-  const weightedAreaTotal = weightedAreas.reduce(
-    (sum, area) => sum + area,
-    0,
-  );
+  const weightedAreaTotal = weightedAreas.reduce((sum, area) => sum + area, 0);
   const ideals = weightedAreas.map(
-    (weightedArea) =>
-      (weightedArea / weightedAreaTotal) * totalCardCount,
+    (weightedArea) => (weightedArea / weightedAreaTotal) * totalCardCount,
   );
   let states = new Map<number, AllocationState>();
 
@@ -417,8 +393,7 @@ function allocateBlockCardCounts(
           continue;
         }
 
-        const nextCost =
-          state.cost + Math.abs(cardCount - ideals[blockIndex]);
+        const nextCost = state.cost + Math.abs(cardCount - ideals[blockIndex]);
         const existing = nextStates.get(nextAssignedCount);
 
         if (!existing || nextCost < existing.cost) {
@@ -471,11 +446,7 @@ function createPlanForGrid(
 
   for (const [blockIndex, allocation] of allocations.entries()) {
     const { block, cardCount } = allocation;
-    const variants = getTilingVariants(
-      block.columns,
-      block.rows,
-      cardCount,
-    );
+    const variants = getTilingVariants(block.columns, block.rows, cardCount);
 
     if (variants.length === 0) {
       return null;
@@ -489,17 +460,10 @@ function createPlanForGrid(
     for (const placement of placements) {
       tiles.push({
         pos: {
-          x:
-            startX +
-            (block.column + placement.column) * columnPitch,
-          y:
-            startY +
-            (block.row + placement.row) * rowPitch,
+          x: startX + (block.column + placement.column) * columnPitch,
+          y: startY + (block.row + placement.row) * rowPitch,
         },
-        size: getSpanSize(
-          placement.columnSpan,
-          placement.rowSpan,
-        ),
+        size: getSpanSize(placement.columnSpan, placement.rowSpan),
       });
     }
   }
@@ -542,10 +506,7 @@ export function createBentoGridPlan(
 
   const fallbackColumns = 1;
   const fallbackRows = count;
-  const gridSize = getGridPixelSize(
-    fallbackColumns,
-    fallbackRows,
-  );
+  const gridSize = getGridPixelSize(fallbackColumns, fallbackRows);
   const startX = snapCoordinate(center.x - gridSize.width / 2);
   const startY = snapCoordinate(center.y - gridSize.height / 2);
   const rowPitch = BASE_TILE.height + CARD_GAP;
