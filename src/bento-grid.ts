@@ -132,8 +132,7 @@ export function createBentoGridPlan(
   let cardIndex = 0;
 
   for (const [bandIndex, band] of bands.entries()) {
-    const bandColumnOffset =
-      bandIndex % 2 === 0 ? 0 : columns - band.columns;
+    const bandColumnOffset = bandIndex % 2 === 0 ? 0 : columns - band.columns;
     let column = bandColumnOffset;
     const row = bandIndex * 2;
 
