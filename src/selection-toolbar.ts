@@ -148,9 +148,8 @@ export default class SelectionToolbarController {
   private showLayoutMenu(event: MouseEvent): void {
     const menu = new Menu();
 
-    addMenuItem(menu, "Moodboard", () => this.actions.layout("moodboard"));
-    addMenuItem(menu, "Bento", () => this.actions.layout("bento"));
-    addMenuItem(menu, "Grid", () => this.actions.layout("grid"));
+    addMenuItem(menu, "Bento grid", () => this.actions.layout("bento"));
+    addMenuItem(menu, "Even grid", () => this.actions.layout("grid"));
     addMenuItem(menu, "Row", () => this.actions.layout("row"));
     addMenuItem(menu, "Column", () => this.actions.layout("column"));
 
@@ -185,7 +184,7 @@ export default class SelectionToolbarController {
   private showSizeMenu(event: MouseEvent): void {
     const menu = new Menu();
 
-    addMenuItem(menu, "Small · 672 × 420", () =>
+    addMenuItem(menu, "Small · 800 × 500", () =>
       this.actions.sizePreset("small"),
     );
     addMenuItem(menu, "Medium · 896 × 560", () =>

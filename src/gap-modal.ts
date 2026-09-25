@@ -1,5 +1,9 @@
 import { type App, Modal, Notice } from "obsidian";
-import { CARD_GAP } from "./constants";
+import {
+  CARD_GAP,
+  SPACING_UNIT,
+  snapSpacing,
+} from "./constants";
 
 export default class GapModal extends Modal {
   constructor(
@@ -16,9 +20,9 @@ export default class GapModal extends Modal {
     const input = document.createElement("input");
     input.type = "number";
     input.min = "0";
-    input.step = "1";
+    input.step = String(SPACING_UNIT);
     input.value = String(CARD_GAP);
-    input.placeholder = "Gap in Canvas units";
+    input.placeholder = "Gap · 4-point grid";
     input.style.width = "100%";
 
     const submit = (): void => {
@@ -29,7 +33,7 @@ export default class GapModal extends Modal {
         return;
       }
 
-      this.onSubmit(gap);
+      this.onSubmit(snapSpacing(gap));
       this.close();
     };
 
