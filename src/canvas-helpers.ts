@@ -13,6 +13,13 @@ export type GridLayoutMetrics = {
   startY: number;
 };
 
+export type SelectionBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
 export function isEditablePasteTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
@@ -109,9 +116,11 @@ export function getSelectedNodes(canvas: CanvasLike): CanvasNodeLike[] {
   return selectedNodes;
 }
 
-export function getSelectionCenter(nodes: readonly CanvasNodeLike[]): Point {
+export function getSelectionBounds(
+  nodes: readonly CanvasNodeLike[],
+): SelectionBounds | null {
   if (nodes.length === 0) {
-    return { x: 0, y: 0 };
+    return null;
   }
 
   let minX = Number.POSITIVE_INFINITY;
@@ -126,9 +135,19 @@ export function getSelectionCenter(nodes: readonly CanvasNodeLike[]): Point {
     maxY = Math.max(maxY, node.y + node.height);
   }
 
+  return { minX, minY, maxX, maxY };
+}
+
+export function getSelectionCenter(nodes: readonly CanvasNodeLike[]): Point {
+  const bounds = getSelectionBounds(nodes);
+
+  if (!bounds) {
+    return { x: 0, y: 0 };
+  }
+
   return {
-    x: (minX + maxX) / 2,
-    y: (minY + maxY) / 2,
+    x: (bounds.minX + bounds.maxX) / 2,
+    y: (bounds.minY + bounds.maxY) / 2,
   };
 }
 

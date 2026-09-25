@@ -1,4 +1,5 @@
 import {
+  getSelectionBounds,
   getSelectionCenter,
   sortNodesReadingOrder,
   updateNodeGeometry,
@@ -7,13 +8,28 @@ import {
   CARD_GAP,
   LAYOUT_TARGET_ASPECT_RATIO,
   NODE_MUTATION_BATCH_SIZE,
+  SMART_CARD_SIZES,
+  type SmartCardSizeName,
 } from "./constants";
+import {
+  createMoodboardPlan,
+  getMoodboardRowStartX,
+  getSmartWebCardSize,
+} from "./moodboard";
 import { forEachBatched } from "./scheduler";
 import type { CanvasNodeLike } from "./types";
 
 export type SizeMatchMode = "largest" | "smallest";
-export type SelectionLayout = "row" | "column" | "grid" | "bento";
+export type SelectionLayout = "row" | "column" | "grid" | "bento" | "moodboard";
 export type GapDirection = "horizontal" | "vertical";
+export type Alignment =
+  | "left"
+  | "center-x"
+  | "right"
+  | "top"
+  | "center-y"
+  | "bottom";
+export type DistributionDirection = "horizontal" | "vertical";
 
 function getBalancedColumnCount(nodes: readonly CanvasNodeLike[]): number {
   if (nodes.length <= 1) {
@@ -35,6 +51,12 @@ function getBalancedColumnCount(nodes: readonly CanvasNodeLike[]): number {
   );
 
   return Math.min(nodes.length, Math.max(1, Math.ceil(rawColumns)));
+}
+
+function isWebCard(node: CanvasNodeLike): boolean {
+  const data = node.getData();
+
+  return data.type === "link" || typeof data.url === "string";
 }
 
 export async function matchNodeSizes(
@@ -70,6 +92,117 @@ export async function matchNodeSizes(
       width: target.width,
       height: target.height,
     });
+  });
+}
+
+export async function setNodeSizePreset(
+  nodes: CanvasNodeLike[],
+  preset: SmartCardSizeName,
+): Promise<void> {
+  const size = SMART_CARD_SIZES[preset];
+
+  await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
+    const centerX = node.x + node.width / 2;
+    const centerY = node.y + node.height / 2;
+
+    updateNodeGeometry(node, {
+      x: centerX - size.width / 2,
+      y: centerY - size.height / 2,
+      width: size.width,
+      height: size.height,
+    });
+  });
+}
+
+export async function alignNodes(
+  nodes: CanvasNodeLike[],
+  alignment: Alignment,
+): Promise<void> {
+  const bounds = getSelectionBounds(nodes);
+
+  if (!bounds) {
+    return;
+  }
+
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+
+  await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
+    if (alignment === "left") {
+      updateNodeGeometry(node, { x: bounds.minX });
+      return;
+    }
+
+    if (alignment === "center-x") {
+      updateNodeGeometry(node, { x: centerX - node.width / 2 });
+      return;
+    }
+
+    if (alignment === "right") {
+      updateNodeGeometry(node, { x: bounds.maxX - node.width });
+      return;
+    }
+
+    if (alignment === "top") {
+      updateNodeGeometry(node, { y: bounds.minY });
+      return;
+    }
+
+    if (alignment === "center-y") {
+      updateNodeGeometry(node, { y: centerY - node.height / 2 });
+      return;
+    }
+
+    updateNodeGeometry(node, { y: bounds.maxY - node.height });
+  });
+}
+
+export async function distributeNodes(
+  nodes: CanvasNodeLike[],
+  direction: DistributionDirection,
+): Promise<void> {
+  if (nodes.length < 3) {
+    return;
+  }
+
+  if (direction === "horizontal") {
+    nodes.sort((a, b) => a.x - b.x);
+
+    const start = nodes[0].x;
+    const end = nodes[nodes.length - 1].x + nodes[nodes.length - 1].width;
+    let occupiedWidth = 0;
+
+    for (const node of nodes) {
+      occupiedWidth += node.width;
+    }
+
+    const gap = (end - start - occupiedWidth) / (nodes.length - 1);
+    let x = start;
+
+    await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
+      updateNodeGeometry(node, { x });
+      x += node.width + gap;
+    });
+
+    return;
+  }
+
+  nodes.sort((a, b) => a.y - b.y);
+
+  const start = nodes[0].y;
+  const end = nodes[nodes.length - 1].y + nodes[nodes.length - 1].height;
+  let occupiedHeight = 0;
+
+  for (const node of nodes) {
+    occupiedHeight += node.height;
+  }
+
+  const gap = (end - start - occupiedHeight) / (nodes.length - 1);
+  let y = start;
+
+  await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
+    updateNodeGeometry(node, { y });
+    y += node.height + gap;
   });
 }
 
@@ -226,6 +359,41 @@ async function arrangeBento(nodes: CanvasNodeLike[]): Promise<void> {
   });
 }
 
+async function arrangeMoodboard(nodes: CanvasNodeLike[]): Promise<void> {
+  sortNodesReadingOrder(nodes);
+
+  const center = getSelectionCenter(nodes);
+  const resizeWebCards = nodes.every(isWebCard);
+  const getSize = (index: number) =>
+    resizeWebCards
+      ? getSmartWebCardSize(index, nodes.length)
+      : { width: nodes[index].width, height: nodes[index].height };
+  const plan = createMoodboardPlan(nodes.length, center, getSize);
+
+  let rowIndex = 0;
+  let x = getMoodboardRowStartX(plan, rowIndex);
+  let y = plan.startY;
+
+  await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node, index) => {
+    while (index >= plan.rows[rowIndex].end) {
+      y += plan.rows[rowIndex].height + CARD_GAP;
+      rowIndex += 1;
+      x = getMoodboardRowStartX(plan, rowIndex);
+    }
+
+    const size = getSize(index);
+
+    updateNodeGeometry(node, {
+      x,
+      y: y + (plan.rows[rowIndex].height - size.height) / 2,
+      width: size.width,
+      height: size.height,
+    });
+
+    x += size.width + CARD_GAP;
+  });
+}
+
 export async function arrangeNodes(
   nodes: CanvasNodeLike[],
   layout: SelectionLayout,
@@ -248,6 +416,11 @@ export async function arrangeNodes(
 
   if (layout === "bento") {
     await arrangeBento(nodes);
+    return;
+  }
+
+  if (layout === "moodboard") {
+    await arrangeMoodboard(nodes);
     return;
   }
 
