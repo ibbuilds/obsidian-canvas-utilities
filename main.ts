@@ -3,24 +3,39 @@ import {
   createPasteGridLayout,
   getGridPosition,
   getSelectedNodes,
+  getSelectionBounds,
   getViewportCenter,
   isEditablePasteTarget,
 } from "./src/canvas-helpers";
 import {
+  CARD_GAP,
   CARD_SIZES,
   DEFAULT_CARD_SIZE,
+  GROUP_PADDING,
+  type SmartCardSizeName,
   WEB_CARD_BATCH_SIZE,
 } from "./src/constants";
 import GapModal from "./src/gap-modal";
+import {
+  createMoodboardPlan,
+  getMoodboardRowStartX,
+  getSmartWebCardSize,
+} from "./src/moodboard";
 import { yieldToUi } from "./src/scheduler";
 import {
+  alignNodes,
+  type Alignment,
   arrangeNodes,
+  type DistributionDirection,
+  distributeNodes,
   type GapDirection,
   matchNodeSizes,
   type SelectionLayout,
   type SizeMatchMode,
   setNodeGap,
+  setNodeSizePreset,
 } from "./src/selection";
+import SelectionToolbarController from "./src/selection-toolbar";
 import type {
   CanvasLike,
   CanvasNodeLike,
@@ -29,44 +44,70 @@ import type {
 } from "./src/types";
 import { extractExcalidrawEmbedUrls, extractHttpUrls } from "./src/urls";
 
+type SelectionMutation = (
+  canvas: CanvasLike,
+  nodes: CanvasNodeLike[],
+) => Promise<void> | void;
+
 export default class CanvasUtilitiesPlugin extends Plugin {
   private readonly registeredCanvasWrappers = new WeakSet<HTMLElement>();
+  private readonly selectionToolbar = new SelectionToolbarController({
+    layout: (layout) => void this.arrangeSelectedNodes(layout),
+    align: (alignment) => void this.alignSelectedNodes(alignment),
+    distribute: (direction) => void this.distributeSelectedNodes(direction),
+    sizePreset: (preset) => void this.setSelectedNodeSizePreset(preset),
+    matchSize: (mode) => void this.matchSelectedNodeSize(mode),
+    group: () => void this.groupSelection(),
+  });
+  private mutationChain = Promise.resolve();
 
   override onload(): void {
     this.addCommand({
       id: "paste-urls-as-web-cards",
-      name: "Paste URLs as web cards",
-      callback: () => this.pasteClipboardUrls(CARD_SIZES.desktop),
+      name: "Paste URLs as smart moodboard",
+      callback: () => this.pasteClipboardUrlsSmart(),
     });
 
     this.addCommand({
       id: "paste-excalidraw-embeds-as-web-cards",
-      name: "Paste Excalidraw embeds as web cards",
+      name: "Paste Excalidraw embeds as smart moodboard",
       callback: () => this.pasteExcalidrawEmbedsAsWebCards(),
     });
 
     this.addCommand({
       id: "paste-urls-as-web-cards-compact",
       name: "Paste URLs as web cards — Compact",
-      callback: () => this.pasteClipboardUrls(CARD_SIZES.compact),
+      callback: () => this.pasteClipboardUrlsFixed(CARD_SIZES.compact),
+    });
+
+    this.addCommand({
+      id: "paste-urls-as-web-cards-desktop",
+      name: "Paste URLs as web cards — Desktop",
+      callback: () => this.pasteClipboardUrlsFixed(CARD_SIZES.desktop),
     });
 
     this.addCommand({
       id: "paste-urls-as-web-cards-large-desktop",
       name: "Paste URLs as web cards — Large Desktop",
-      callback: () => this.pasteClipboardUrls(CARD_SIZES.largeDesktop),
+      callback: () => this.pasteClipboardUrlsFixed(CARD_SIZES.largeDesktop),
     });
 
     this.addCommand({
-      id: "match-selected-node-size-largest",
-      name: "Match selected node size — Largest",
-      callback: () => void this.matchSelectedNodeSize("largest"),
+      id: "arrange-selected-nodes-moodboard",
+      name: "Arrange selected nodes — Moodboard",
+      callback: () => void this.arrangeSelectedNodes("moodboard"),
     });
 
     this.addCommand({
-      id: "match-selected-node-size-smallest",
-      name: "Match selected node size — Smallest",
-      callback: () => void this.matchSelectedNodeSize("smallest"),
+      id: "arrange-selected-nodes-bento",
+      name: "Arrange selected nodes — Bento",
+      callback: () => void this.arrangeSelectedNodes("bento"),
+    });
+
+    this.addCommand({
+      id: "arrange-selected-nodes-grid",
+      name: "Arrange selected nodes — Grid",
+      callback: () => void this.arrangeSelectedNodes("grid"),
     });
 
     this.addCommand({
@@ -82,15 +123,15 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "arrange-selected-nodes-grid",
-      name: "Arrange selected nodes — Grid",
-      callback: () => void this.arrangeSelectedNodes("grid"),
+      id: "match-selected-node-size-largest",
+      name: "Match selected node size — Largest",
+      callback: () => void this.matchSelectedNodeSize("largest"),
     });
 
     this.addCommand({
-      id: "arrange-selected-nodes-bento",
-      name: "Arrange selected nodes — Bento",
-      callback: () => void this.arrangeSelectedNodes("bento"),
+      id: "match-selected-node-size-smallest",
+      name: "Match selected node size — Smallest",
+      callback: () => void this.matchSelectedNodeSize("smallest"),
     });
 
     this.addCommand({
@@ -105,15 +146,310 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       callback: () => this.promptSelectionGap("vertical"),
     });
 
+    this.addCommand({
+      id: "group-selected-nodes",
+      name: "Group selected nodes",
+      callback: () => void this.groupSelection(),
+    });
+
     this.app.workspace.onLayoutReady(() => {
-      this.registerCanvasPasteHandlers();
+      this.registerCanvasIntegrations();
     });
 
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
-        this.registerCanvasPasteHandlers();
+        this.registerCanvasIntegrations();
       }),
     );
+  }
+
+  private registerCanvasIntegrations(): void {
+    const leaves = this.app.workspace.getLeavesOfType("canvas");
+
+    for (const leaf of leaves) {
+      const canvas = this.getCanvasFromLeaf(leaf);
+
+      if (!canvas) {
+        continue;
+      }
+
+      const wrapper = canvas.wrapperEl;
+
+      if (this.registeredCanvasWrappers.has(wrapper)) {
+        this.selectionToolbar.refresh(canvas);
+        continue;
+      }
+
+      this.registeredCanvasWrappers.add(wrapper);
+
+      const pasteHandler = (event: ClipboardEvent): void => {
+        this.handleCanvasPaste(event, canvas);
+      };
+
+      wrapper.addEventListener("paste", pasteHandler, true);
+      const detachToolbar = this.selectionToolbar.attach(canvas);
+
+      this.register(() => {
+        wrapper.removeEventListener("paste", pasteHandler, true);
+        detachToolbar();
+      });
+    }
+  }
+
+  private handleCanvasPaste(event: ClipboardEvent, canvas: CanvasLike): void {
+    if (isEditablePasteTarget(event.target)) {
+      return;
+    }
+
+    const text = event.clipboardData?.getData("text/plain");
+
+    if (!text) {
+      return;
+    }
+
+    const excalidraw = extractExcalidrawEmbedUrls(text);
+
+    if (excalidraw.recognized) {
+      if (excalidraw.urls.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      void this.createSmartWebCards(canvas, excalidraw.urls);
+      return;
+    }
+
+    const { validCount, urls } = extractHttpUrls(text);
+
+    if (validCount < 2) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    void this.createSmartWebCards(canvas, urls);
+  }
+
+  private async pasteClipboardUrlsSmart(): Promise<void> {
+    const canvas = this.getActiveCanvas();
+
+    if (!canvas) {
+      new Notice("Open a Canvas first");
+      return;
+    }
+
+    const urls = await this.readClipboardUrls();
+
+    if (!urls) {
+      return;
+    }
+
+    await this.createSmartWebCards(canvas, urls);
+  }
+
+  private async pasteClipboardUrlsFixed(size: CardSize): Promise<void> {
+    const canvas = this.getActiveCanvas();
+
+    if (!canvas) {
+      new Notice("Open a Canvas first");
+      return;
+    }
+
+    const urls = await this.readClipboardUrls();
+
+    if (!urls) {
+      return;
+    }
+
+    await this.createFixedWebCards(canvas, urls, size);
+  }
+
+  private async pasteExcalidrawEmbedsAsWebCards(): Promise<void> {
+    const canvas = this.getActiveCanvas();
+
+    if (!canvas) {
+      new Notice("Open a Canvas first");
+      return;
+    }
+
+    const text = await this.readClipboardText();
+
+    if (text === null) {
+      return;
+    }
+
+    const { recognized, urls } = extractExcalidrawEmbedUrls(text);
+
+    if (!recognized || urls.length === 0) {
+      new Notice("Clipboard does not contain valid Excalidraw web embeds");
+      return;
+    }
+
+    await this.createSmartWebCards(canvas, urls);
+  }
+
+  private async readClipboardUrls(): Promise<string[] | null> {
+    const text = await this.readClipboardText();
+
+    if (text === null) {
+      return null;
+    }
+
+    const { urls } = extractHttpUrls(text);
+
+    if (urls.length === 0) {
+      new Notice("Clipboard does not contain valid URLs");
+      return null;
+    }
+
+    return urls;
+  }
+
+  private async readClipboardText(): Promise<string | null> {
+    try {
+      return await navigator.clipboard.readText();
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to read clipboard", error);
+      new Notice("Unable to read the clipboard");
+      return null;
+    }
+  }
+
+  private async createSmartWebCards(
+    canvas: CanvasLike,
+    urls: string[],
+  ): Promise<void> {
+    const origin = getViewportCenter(canvas);
+
+    if (!origin) {
+      new Notice("Unable to determine the Canvas viewport");
+      return;
+    }
+
+    const getSize = (index: number) => getSmartWebCardSize(index, urls.length);
+    const plan = createMoodboardPlan(urls.length, origin, getSize);
+    const createdNodes: CanvasNodeLike[] = [];
+    let rowIndex = 0;
+    let x = getMoodboardRowStartX(plan, rowIndex);
+    let y = plan.startY;
+
+    this.emitBatchEvent("start", canvas, "create");
+
+    try {
+      for (let index = 0; index < urls.length; index += 1) {
+        while (index >= plan.rows[rowIndex].end) {
+          y += plan.rows[rowIndex].height + CARD_GAP;
+          rowIndex += 1;
+          x = getMoodboardRowStartX(plan, rowIndex);
+        }
+
+        const size = getSize(index);
+        const node = canvas.createLinkNode({
+          pos: {
+            x,
+            y: y + (plan.rows[rowIndex].height - size.height) / 2,
+          },
+          size,
+          position: "center",
+          url: urls[index],
+          save: false,
+          focus: false,
+        });
+
+        createdNodes.push(node);
+        x += size.width + CARD_GAP;
+
+        if (
+          createdNodes.length % WEB_CARD_BATCH_SIZE === 0 &&
+          createdNodes.length < urls.length
+        ) {
+          await yieldToUi();
+        }
+      }
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to create web cards", error);
+      new Notice("Failed to create all web cards");
+    } finally {
+      this.finishCreatedNodes(canvas, createdNodes);
+      this.emitBatchEvent("end", canvas, "create", createdNodes);
+    }
+  }
+
+  private async createFixedWebCards(
+    canvas: CanvasLike,
+    urls: string[],
+    size: CardSize,
+  ): Promise<void> {
+    const origin = getViewportCenter(canvas);
+
+    if (!origin) {
+      new Notice("Unable to determine the Canvas viewport");
+      return;
+    }
+
+    const layout = createPasteGridLayout(urls.length, origin, size);
+    const createdNodes: CanvasNodeLike[] = [];
+
+    this.emitBatchEvent("start", canvas, "create");
+
+    try {
+      for (let index = 0; index < urls.length; index += 1) {
+        createdNodes.push(
+          canvas.createLinkNode({
+            pos: getGridPosition(index, layout, size),
+            size,
+            position: "center",
+            url: urls[index],
+            save: false,
+            focus: false,
+          }),
+        );
+
+        if (
+          createdNodes.length % WEB_CARD_BATCH_SIZE === 0 &&
+          createdNodes.length < urls.length
+        ) {
+          await yieldToUi();
+        }
+      }
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to create web cards", error);
+      new Notice("Failed to create all web cards");
+    } finally {
+      this.finishCreatedNodes(canvas, createdNodes);
+      this.emitBatchEvent("end", canvas, "create", createdNodes);
+    }
+  }
+
+  private finishCreatedNodes(
+    canvas: CanvasLike,
+    createdNodes: CanvasNodeLike[],
+  ): void {
+    if (createdNodes.length === 0) {
+      return;
+    }
+
+    try {
+      canvas.requestSave(false);
+      this.selectNodes(canvas, createdNodes);
+      this.selectionToolbar.refresh(canvas);
+    } catch (error) {
+      console.error("[Canvas Utilities] Failed to finalize web cards", error);
+      new Notice("Failed to save the Canvas");
+    }
+  }
+
+  private selectNodes(canvas: CanvasLike, nodes: CanvasNodeLike[]): void {
+    if (!canvas.updateSelection || !canvas.selection) {
+      return;
+    }
+
+    canvas.updateSelection(() => {
+      canvas.selection = new Set(nodes);
+    });
   }
 
   private getMutableSelectedNodes(): {
@@ -142,36 +478,79 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     return { canvas, nodes };
   }
 
-  private commitNodeMutation(canvas: CanvasLike): void {
-    const data = canvas.getData?.();
-
-    if (data !== undefined) {
-      canvas.pushHistory?.(data);
-    }
-
-    canvas.requestSave(false);
-  }
-
-  private async matchSelectedNodeSize(mode: SizeMatchMode): Promise<void> {
+  private queueSelectionMutation(
+    reason: string,
+    mutation: SelectionMutation,
+  ): Promise<void> {
     const selection = this.getMutableSelectedNodes();
 
     if (!selection) {
-      return;
+      return Promise.resolve();
     }
 
-    await matchNodeSizes(selection.nodes, mode);
-    this.commitNodeMutation(selection.canvas);
+    const { canvas, nodes } = selection;
+
+    this.mutationChain = this.mutationChain
+      .catch((error) => {
+        console.error("[Canvas Utilities] Previous mutation failed", error);
+      })
+      .then(async () => {
+        const before = canvas.getData?.();
+
+        this.emitBatchEvent("start", canvas, reason, nodes);
+        await mutation(canvas, nodes);
+
+        if (before !== undefined) {
+          canvas.pushHistory?.(before);
+        }
+
+        canvas.requestSave(false);
+        this.emitGeometryChanged(canvas, nodes, reason);
+        this.emitBatchEvent("end", canvas, reason, nodes);
+        this.selectionToolbar.refresh(canvas);
+      })
+      .catch((error) => {
+        console.error("[Canvas Utilities] Selection mutation failed", error);
+        new Notice("Canvas operation failed");
+      });
+
+    return this.mutationChain;
   }
 
-  private async arrangeSelectedNodes(layout: SelectionLayout): Promise<void> {
-    const selection = this.getMutableSelectedNodes();
+  private matchSelectedNodeSize(mode: SizeMatchMode): Promise<void> {
+    return this.queueSelectionMutation("match-size", (_canvas, nodes) =>
+      matchNodeSizes(nodes, mode),
+    );
+  }
 
-    if (!selection) {
-      return;
-    }
+  private setSelectedNodeSizePreset(
+    preset: SmartCardSizeName,
+  ): Promise<void> {
+    return this.queueSelectionMutation("size-preset", (_canvas, nodes) =>
+      setNodeSizePreset(nodes, preset),
+    );
+  }
 
-    await arrangeNodes(selection.nodes, layout);
-    this.commitNodeMutation(selection.canvas);
+  private arrangeSelectedNodes(layout: SelectionLayout): Promise<void> {
+    return this.queueSelectionMutation(`layout:${layout}`, (_canvas, nodes) =>
+      arrangeNodes(nodes, layout),
+    );
+  }
+
+  private alignSelectedNodes(alignment: Alignment): Promise<void> {
+    return this.queueSelectionMutation(
+      `align:${alignment}`,
+      (_canvas, nodes) => alignNodes(nodes, alignment),
+    );
+  }
+
+  private distributeSelectedNodes(
+    direction: DistributionDirection,
+  ): Promise<void> {
+    return this.queueSelectionMutation(
+      `distribute:${direction}`,
+      (_canvas, nodes) => distributeNodes(nodes, direction),
+    );
   }
 
   private promptSelectionGap(direction: GapDirection): void {
@@ -182,192 +561,68 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
 
     new GapModal(this.app, `Set ${direction} gap`, (gap) => {
-      void this.applySelectionGap(selection, direction, gap);
+      void this.queueSelectionMutation(
+        `gap:${direction}`,
+        (_canvas, nodes) => setNodeGap(nodes, direction, gap),
+      );
     }).open();
   }
 
-  private async applySelectionGap(
-    selection: { canvas: CanvasLike; nodes: CanvasNodeLike[] },
-    direction: GapDirection,
-    gap: number,
-  ): Promise<void> {
-    await setNodeGap(selection.nodes, direction, gap);
-    this.commitNodeMutation(selection.canvas);
-  }
-
-  private registerCanvasPasteHandlers(): void {
-    const leaves = this.app.workspace.getLeavesOfType("canvas");
-
-    for (const leaf of leaves) {
-      const canvas = this.getCanvasFromLeaf(leaf);
-
-      if (!canvas) {
-        continue;
-      }
-
-      const wrapper = canvas.wrapperEl;
-
-      if (this.registeredCanvasWrappers.has(wrapper)) {
-        continue;
-      }
-
-      this.registeredCanvasWrappers.add(wrapper);
-
-      const handler = (event: ClipboardEvent): void => {
-        this.handleCanvasPaste(event, canvas);
-      };
-
-      wrapper.addEventListener("paste", handler, true);
-
-      this.register(() => {
-        wrapper.removeEventListener("paste", handler, true);
-      });
-    }
-  }
-
-  private handleCanvasPaste(event: ClipboardEvent, canvas: CanvasLike): void {
-    if (isEditablePasteTarget(event.target)) {
-      return;
-    }
-
-    const text = event.clipboardData?.getData("text/plain");
-
-    if (!text) {
-      return;
-    }
-
-    const excalidraw = extractExcalidrawEmbedUrls(text);
-
-    if (excalidraw.recognized) {
-      if (excalidraw.urls.length === 0) {
+  private groupSelection(): Promise<void> {
+    return this.queueSelectionMutation("group", (canvas, nodes) => {
+      if (!canvas.createGroupNode) {
+        new Notice("Grouping is not available in this Canvas version");
         return;
       }
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      const bounds = getSelectionBounds(nodes);
 
-      void this.createWebCards(canvas, excalidraw.urls, DEFAULT_CARD_SIZE);
-      return;
-    }
+      if (!bounds) {
+        return;
+      }
 
-    const { validCount, urls } = extractHttpUrls(text);
+      const group = canvas.createGroupNode({
+        pos: {
+          x: bounds.minX - GROUP_PADDING,
+          y: bounds.minY - GROUP_PADDING,
+        },
+        size: {
+          width: bounds.maxX - bounds.minX + GROUP_PADDING * 2,
+          height: bounds.maxY - bounds.minY + GROUP_PADDING * 2,
+        },
+        save: false,
+        focus: false,
+      });
 
-    if (validCount < 2) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-
-    void this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
+      this.selectNodes(canvas, [group]);
+    });
   }
 
-  private async pasteClipboardUrls(size: CardSize): Promise<void> {
-    const canvas = this.getActiveCanvas();
-
-    if (!canvas) {
-      new Notice("Open a Canvas first");
-      return;
-    }
-
-    const text = await this.readClipboardText();
-
-    if (text === null) {
-      return;
-    }
-
-    const { urls } = extractHttpUrls(text);
-
-    if (urls.length === 0) {
-      new Notice("Clipboard does not contain valid URLs");
-      return;
-    }
-
-    await this.createWebCards(canvas, urls, size);
-  }
-
-  private async pasteExcalidrawEmbedsAsWebCards(): Promise<void> {
-    const canvas = this.getActiveCanvas();
-
-    if (!canvas) {
-      new Notice("Open a Canvas first");
-      return;
-    }
-
-    const text = await this.readClipboardText();
-
-    if (text === null) {
-      return;
-    }
-
-    const { recognized, urls } = extractExcalidrawEmbedUrls(text);
-
-    if (!recognized || urls.length === 0) {
-      new Notice("Clipboard does not contain valid Excalidraw web embeds");
-      return;
-    }
-
-    await this.createWebCards(canvas, urls, DEFAULT_CARD_SIZE);
-  }
-
-  private async readClipboardText(): Promise<string | null> {
-    try {
-      return await navigator.clipboard.readText();
-    } catch (error) {
-      console.error("[Canvas Utilities] Failed to read clipboard", error);
-      new Notice("Unable to read the clipboard");
-      return null;
-    }
-  }
-
-  private async createWebCards(
+  private emitBatchEvent(
+    phase: "start" | "end",
     canvas: CanvasLike,
-    urls: string[],
-    size: CardSize,
-  ): Promise<void> {
-    const origin = getViewportCenter(canvas);
+    reason: string,
+    nodes: CanvasNodeLike[] = [],
+  ): void {
+    this.app.workspace.trigger(
+      `canvas-utilities:batch-${phase}`,
+      canvas,
+      {
+        reason,
+        nodeIds: nodes.map((node) => node.id),
+      },
+    );
+  }
 
-    if (!origin) {
-      new Notice("Unable to determine the Canvas viewport");
-      return;
-    }
-
-    const layout = createPasteGridLayout(urls.length, origin, size);
-    let createdCount = 0;
-
-    try {
-      for (let index = 0; index < urls.length; index += 1) {
-        canvas.createLinkNode({
-          pos: getGridPosition(index, layout, size),
-          size,
-          position: "center",
-          url: urls[index],
-          save: false,
-          focus: false,
-        });
-
-        createdCount += 1;
-
-        if (
-          createdCount % WEB_CARD_BATCH_SIZE === 0 &&
-          createdCount < urls.length
-        ) {
-          await yieldToUi();
-        }
-      }
-    } catch (error) {
-      console.error("[Canvas Utilities] Failed to create web cards", error);
-      new Notice("Failed to create all web cards");
-    } finally {
-      if (createdCount > 0) {
-        try {
-          canvas.requestSave(false);
-        } catch (error) {
-          console.error("[Canvas Utilities] Failed to save Canvas", error);
-          new Notice("Failed to save the Canvas");
-        }
-      }
-    }
+  private emitGeometryChanged(
+    canvas: CanvasLike,
+    nodes: CanvasNodeLike[],
+    reason: string,
+  ): void {
+    this.app.workspace.trigger("canvas-utilities:geometry-changed", canvas, {
+      reason,
+      nodeIds: nodes.map((node) => node.id),
+    });
   }
 
   private getCanvasFromLeaf(leaf: WorkspaceLeaf | null): CanvasLike | null {
