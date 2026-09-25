@@ -24,11 +24,7 @@ const TOOLBAR_IDS = [
   "canvas-utilities-group",
 ] as const;
 
-function addMenuItem(
-  menu: Menu,
-  title: string,
-  callback: () => void,
-): void {
+function addMenuItem(menu: Menu, title: string, callback: () => void): void {
   menu.addItem((item) => {
     item.setTitle(title).onClick(callback);
   });
@@ -202,9 +198,7 @@ export default class SelectionToolbarController {
       this.actions.sizePreset("hero"),
     );
     menu.addSeparator();
-    addMenuItem(menu, "Match largest", () =>
-      this.actions.matchSize("largest"),
-    );
+    addMenuItem(menu, "Match largest", () => this.actions.matchSize("largest"));
     addMenuItem(menu, "Match smallest", () =>
       this.actions.matchSize("smallest"),
     );
