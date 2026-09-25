@@ -33,10 +33,7 @@ const SIZE_PATTERN = [
   "medium",
 ] as const;
 
-export function getSmartWebCardSize(
-  index: number,
-  count: number,
-): CardSize {
+export function getSmartWebCardSize(index: number, count: number): CardSize {
   if (count <= 1) {
     return SMART_CARD_SIZES.medium;
   }
@@ -58,9 +55,7 @@ function getTargetWidth(count: number): number {
     Math.ceil(Math.sqrt(count * LAYOUT_TARGET_ASPECT_RATIO)),
   );
 
-  return (
-    columns * SMART_CARD_SIZES.medium.width + (columns - 1) * CARD_GAP
-  );
+  return columns * SMART_CARD_SIZES.medium.width + (columns - 1) * CARD_GAP;
 }
 
 export function createMoodboardPlan(
@@ -84,7 +79,8 @@ export function createMoodboardPlan(
 
   for (let index = 0; index < count; index += 1) {
     const size = getSize(index);
-    const nextWidth = rowWidth === 0 ? size.width : rowWidth + CARD_GAP + size.width;
+    const nextWidth =
+      rowWidth === 0 ? size.width : rowWidth + CARD_GAP + size.width;
 
     if (rowWidth > 0 && nextWidth > targetWidth) {
       rows.push({
