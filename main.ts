@@ -1,4 +1,5 @@
 import { Notice, Plugin, type WorkspaceLeaf } from "obsidian";
+import { createBentoGridPlan } from "./src/bento-grid";
 import {
   createPasteGridLayout,
   getGridPosition,
@@ -8,18 +9,12 @@ import {
   isEditablePasteTarget,
 } from "./src/canvas-helpers";
 import {
-  CARD_GAP,
   CARD_SIZES,
   GROUP_PADDING,
   type SmartCardSizeName,
   WEB_CARD_BATCH_SIZE,
 } from "./src/constants";
 import GapModal from "./src/gap-modal";
-import {
-  createMoodboardPlan,
-  getMoodboardRowStartX,
-  getSmartWebCardSize,
-} from "./src/moodboard";
 import { yieldToUi } from "./src/scheduler";
 import {
   type Alignment,
@@ -63,13 +58,13 @@ export default class CanvasUtilitiesPlugin extends Plugin {
   override onload(): void {
     this.addCommand({
       id: "paste-urls-as-web-cards",
-      name: "Paste URLs as smart moodboard",
-      callback: () => this.pasteClipboardUrlsSmart(),
+      name: "Paste URLs as bento grid",
+      callback: () => this.pasteClipboardUrlsBento(),
     });
 
     this.addCommand({
       id: "paste-excalidraw-embeds-as-web-cards",
-      name: "Paste Excalidraw embeds as smart moodboard",
+      name: "Paste Excalidraw embeds as bento grid",
       callback: () => this.pasteExcalidrawEmbedsAsWebCards(),
     });
 
@@ -92,20 +87,14 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "arrange-selected-nodes-moodboard",
-      name: "Arrange selected nodes — Moodboard",
-      callback: () => void this.arrangeSelectedNodes("moodboard"),
-    });
-
-    this.addCommand({
       id: "arrange-selected-nodes-bento",
-      name: "Arrange selected nodes — Bento",
+      name: "Arrange selected nodes — Bento grid",
       callback: () => void this.arrangeSelectedNodes("bento"),
     });
 
     this.addCommand({
       id: "arrange-selected-nodes-grid",
-      name: "Arrange selected nodes — Grid",
+      name: "Arrange selected nodes — Even grid",
       callback: () => void this.arrangeSelectedNodes("grid"),
     });
 
@@ -216,7 +205,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      void this.createSmartWebCards(canvas, excalidraw.urls);
+      void this.createBentoWebCards(canvas, excalidraw.urls);
       return;
     }
 
@@ -229,10 +218,10 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    void this.createSmartWebCards(canvas, urls);
+    void this.createBentoWebCards(canvas, urls);
   }
 
-  private async pasteClipboardUrlsSmart(): Promise<void> {
+  private async pasteClipboardUrlsBento(): Promise<void> {
     const canvas = this.getActiveCanvas();
 
     if (!canvas) {
@@ -246,7 +235,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    await this.createSmartWebCards(canvas, urls);
+    await this.createBentoWebCards(canvas, urls);
   }
 
   private async pasteClipboardUrlsFixed(size: CardSize): Promise<void> {
@@ -287,7 +276,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    await this.createSmartWebCards(canvas, urls);
+    await this.createBentoWebCards(canvas, urls);
   }
 
   private async readClipboardUrls(): Promise<string[] | null> {
@@ -317,7 +306,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     }
   }
 
-  private async createSmartWebCards(
+  private async createBentoWebCards(
     canvas: CanvasLike,
     urls: string[],
   ): Promise<void> {
@@ -328,39 +317,26 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       return;
     }
 
-    const getSize = (index: number) => getSmartWebCardSize(index, urls.length);
-    const plan = createMoodboardPlan(urls.length, origin, getSize);
+    const plan = createBentoGridPlan(urls.length, origin);
     const before = canvas.getData?.();
     const createdNodes: CanvasNodeLike[] = [];
-    let rowIndex = 0;
-    let x = getMoodboardRowStartX(plan, rowIndex);
-    let y = plan.startY;
 
-    this.emitBatchEvent("start", canvas, "create");
+    this.emitBatchEvent("start", canvas, "create:bento");
 
     try {
       for (let index = 0; index < urls.length; index += 1) {
-        while (index >= plan.rows[rowIndex].end) {
-          y += plan.rows[rowIndex].height + CARD_GAP;
-          rowIndex += 1;
-          x = getMoodboardRowStartX(plan, rowIndex);
-        }
+        const tile = plan.tiles[index];
 
-        const size = getSize(index);
-        const node = canvas.createLinkNode({
-          pos: {
-            x,
-            y: y + (plan.rows[rowIndex].height - size.height) / 2,
-          },
-          size,
-          position: "center",
-          url: urls[index],
-          save: false,
-          focus: false,
-        });
-
-        createdNodes.push(node);
-        x += size.width + CARD_GAP;
+        createdNodes.push(
+          canvas.createLinkNode({
+            pos: tile.pos,
+            size: tile.size,
+            position: "center",
+            url: urls[index],
+            save: false,
+            focus: false,
+          }),
+        );
 
         if (
           createdNodes.length % WEB_CARD_BATCH_SIZE === 0 &&
@@ -374,7 +350,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       new Notice("Failed to create all web cards");
     } finally {
       this.finishCreatedNodes(canvas, createdNodes, before);
-      this.emitBatchEvent("end", canvas, "create", createdNodes);
+      this.emitBatchEvent("end", canvas, "create:bento", createdNodes);
     }
   }
 
@@ -394,7 +370,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
     const before = canvas.getData?.();
     const createdNodes: CanvasNodeLike[] = [];
 
-    this.emitBatchEvent("start", canvas, "create");
+    this.emitBatchEvent("start", canvas, "create:fixed-grid");
 
     try {
       for (let index = 0; index < urls.length; index += 1) {
@@ -421,7 +397,7 @@ export default class CanvasUtilitiesPlugin extends Plugin {
       new Notice("Failed to create all web cards");
     } finally {
       this.finishCreatedNodes(canvas, createdNodes, before);
-      this.emitBatchEvent("end", canvas, "create", createdNodes);
+      this.emitBatchEvent("end", canvas, "create:fixed-grid", createdNodes);
     }
   }
 

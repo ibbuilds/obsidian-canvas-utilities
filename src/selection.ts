@@ -1,3 +1,4 @@
+import { createBentoGridPlan } from "./bento-grid";
 import {
   getSelectionBounds,
   getSelectionCenter,
@@ -10,17 +11,13 @@ import {
   NODE_MUTATION_BATCH_SIZE,
   SMART_CARD_SIZES,
   type SmartCardSizeName,
+  snapSpacing,
 } from "./constants";
-import {
-  createMoodboardPlan,
-  getMoodboardRowStartX,
-  getSmartWebCardSize,
-} from "./moodboard";
 import { forEachBatched } from "./scheduler";
 import type { CanvasNodeLike } from "./types";
 
 export type SizeMatchMode = "largest" | "smallest";
-export type SelectionLayout = "row" | "column" | "grid" | "bento" | "moodboard";
+export type SelectionLayout = "row" | "column" | "grid" | "bento";
 export type GapDirection = "horizontal" | "vertical";
 export type Alignment =
   | "left"
@@ -176,7 +173,7 @@ export async function distributeNodes(
       occupiedWidth += node.width;
     }
 
-    const gap = (end - start - occupiedWidth) / (nodes.length - 1);
+    const gap = snapSpacing((end - start - occupiedWidth) / (nodes.length - 1));
     let x = start;
 
     await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
@@ -197,7 +194,7 @@ export async function distributeNodes(
     occupiedHeight += node.height;
   }
 
-  const gap = (end - start - occupiedHeight) / (nodes.length - 1);
+  const gap = snapSpacing((end - start - occupiedHeight) / (nodes.length - 1));
   let y = start;
 
   await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
@@ -310,87 +307,22 @@ async function arrangeGrid(nodes: CanvasNodeLike[]): Promise<void> {
 async function arrangeBento(nodes: CanvasNodeLike[]): Promise<void> {
   sortNodesReadingOrder(nodes);
 
-  const center = getSelectionCenter(nodes);
-  const columns = getBalancedColumnCount(nodes);
-  const rows = Math.ceil(nodes.length / columns);
-  const rowWidths = new Array<number>(rows).fill(0);
-  const rowHeights = new Array<number>(rows).fill(0);
-
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index];
-    const row = Math.floor(index / columns);
-    const column = index % columns;
-
-    rowWidths[row] += node.width;
-
-    if (column > 0) {
-      rowWidths[row] += CARD_GAP;
-    }
-
-    rowHeights[row] = Math.max(rowHeights[row], node.height);
+  if (!nodes.every(isWebCard)) {
+    await arrangeGrid(nodes);
+    return;
   }
 
-  let totalHeight = CARD_GAP * (rows - 1);
-
-  for (const height of rowHeights) {
-    totalHeight += height;
-  }
-
-  const rowOffsetsY = new Array<number>(rows);
-  const rowCursorsX = new Array<number>(rows);
-  let y = center.y - totalHeight / 2;
-
-  for (let row = 0; row < rows; row += 1) {
-    rowOffsetsY[row] = y;
-    rowCursorsX[row] = center.x - rowWidths[row] / 2;
-    y += rowHeights[row] + CARD_GAP;
-  }
+  const plan = createBentoGridPlan(nodes.length, getSelectionCenter(nodes));
 
   await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node, index) => {
-    const row = Math.floor(index / columns);
-    const x = rowCursorsX[row];
+    const tile = plan.tiles[index];
 
     updateNodeGeometry(node, {
-      x,
-      y: rowOffsetsY[row] + (rowHeights[row] - node.height) / 2,
+      x: tile.pos.x,
+      y: tile.pos.y,
+      width: tile.size.width,
+      height: tile.size.height,
     });
-
-    rowCursorsX[row] += node.width + CARD_GAP;
-  });
-}
-
-async function arrangeMoodboard(nodes: CanvasNodeLike[]): Promise<void> {
-  sortNodesReadingOrder(nodes);
-
-  const center = getSelectionCenter(nodes);
-  const resizeWebCards = nodes.every(isWebCard);
-  const getSize = (index: number) =>
-    resizeWebCards
-      ? getSmartWebCardSize(index, nodes.length)
-      : { width: nodes[index].width, height: nodes[index].height };
-  const plan = createMoodboardPlan(nodes.length, center, getSize);
-
-  let rowIndex = 0;
-  let x = getMoodboardRowStartX(plan, rowIndex);
-  let y = plan.startY;
-
-  await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node, index) => {
-    while (index >= plan.rows[rowIndex].end) {
-      y += plan.rows[rowIndex].height + CARD_GAP;
-      rowIndex += 1;
-      x = getMoodboardRowStartX(plan, rowIndex);
-    }
-
-    const size = getSize(index);
-
-    updateNodeGeometry(node, {
-      x,
-      y: y + (plan.rows[rowIndex].height - size.height) / 2,
-      width: size.width,
-      height: size.height,
-    });
-
-    x += size.width + CARD_GAP;
   });
 }
 
@@ -419,11 +351,6 @@ export async function arrangeNodes(
     return;
   }
 
-  if (layout === "moodboard") {
-    await arrangeMoodboard(nodes);
-    return;
-  }
-
   await arrangeGrid(nodes);
 }
 
@@ -436,12 +363,13 @@ export async function setNodeGap(
     return;
   }
 
+  const normalizedGap = snapSpacing(gap);
   const center = getSelectionCenter(nodes);
 
   if (direction === "horizontal") {
     nodes.sort((a, b) => a.x - b.x);
 
-    let totalWidth = gap * (nodes.length - 1);
+    let totalWidth = normalizedGap * (nodes.length - 1);
 
     for (const node of nodes) {
       totalWidth += node.width;
@@ -451,7 +379,7 @@ export async function setNodeGap(
 
     await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
       updateNodeGeometry(node, { x });
-      x += node.width + gap;
+      x += node.width + normalizedGap;
     });
 
     return;
@@ -459,7 +387,7 @@ export async function setNodeGap(
 
   nodes.sort((a, b) => a.y - b.y);
 
-  let totalHeight = gap * (nodes.length - 1);
+  let totalHeight = normalizedGap * (nodes.length - 1);
 
   for (const node of nodes) {
     totalHeight += node.height;
@@ -469,6 +397,6 @@ export async function setNodeGap(
 
   await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
     updateNodeGeometry(node, { y });
-    y += node.height + gap;
+    y += node.height + normalizedGap;
   });
 }
