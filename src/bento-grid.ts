@@ -1,8 +1,4 @@
-import {
-  CARD_GAP,
-  CARD_SIZES,
-  snapCoordinate,
-} from "./constants";
+import { CARD_GAP, CARD_SIZES, snapCoordinate } from "./constants";
 import type { CardSize, Point } from "./types";
 
 type BentoTemplatePlacement = {
@@ -82,8 +78,7 @@ function mirrorTemplate(template: BentoBlockTemplate): BentoBlockTemplate {
     ...template,
     placements: template.placements.map((placement) => ({
       ...placement,
-      column:
-        template.columns - placement.column - placement.columnSpan,
+      column: template.columns - placement.column - placement.columnSpan,
     })),
   };
 }
@@ -98,15 +93,10 @@ function getBlockTemplate(
   return mirrored ? mirrorTemplate(template) : template;
 }
 
-function getSpanSize(
-  columnSpan: number,
-  rowSpan: number,
-): CardSize {
+function getSpanSize(columnSpan: number, rowSpan: number): CardSize {
   return {
-    width:
-      columnSpan * BASE_TILE.width + (columnSpan - 1) * CARD_GAP,
-    height:
-      rowSpan * BASE_TILE.height + (rowSpan - 1) * CARD_GAP,
+    width: columnSpan * BASE_TILE.width + (columnSpan - 1) * CARD_GAP,
+    height: rowSpan * BASE_TILE.height + (rowSpan - 1) * CARD_GAP,
   };
 }
 
@@ -130,9 +120,7 @@ export function createBentoGridPlan(
     start += CARDS_PER_FULL_BLOCK, blockIndex += 1
   ) {
     const blockCount = Math.min(CARDS_PER_FULL_BLOCK, count - start);
-    blockTemplates.push(
-      getBlockTemplate(blockCount, blockIndex % 2 === 1),
-    );
+    blockTemplates.push(getBlockTemplate(blockCount, blockIndex % 2 === 1));
   }
 
   let totalHeight = CARD_GAP * (blockTemplates.length - 1);
@@ -149,19 +137,12 @@ export function createBentoGridPlan(
     const blockX = snapCoordinate(center.x - blockSize.width / 2);
 
     for (const placement of template.placements) {
-      const size = getSpanSize(
-        placement.columnSpan,
-        placement.rowSpan,
-      );
+      const size = getSpanSize(placement.columnSpan, placement.rowSpan);
 
       tiles.push({
         pos: {
-          x:
-            blockX +
-            placement.column * (BASE_TILE.width + CARD_GAP),
-          y:
-            blockY +
-            placement.row * (BASE_TILE.height + CARD_GAP),
+          x: blockX + placement.column * (BASE_TILE.width + CARD_GAP),
+          y: blockY + placement.row * (BASE_TILE.height + CARD_GAP),
         },
         size,
       });
