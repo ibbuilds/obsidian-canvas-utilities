@@ -1,10 +1,10 @@
+import { createBentoGridPlan } from "./bento-grid";
 import {
   getSelectionBounds,
   getSelectionCenter,
   sortNodesReadingOrder,
   updateNodeGeometry,
 } from "./canvas-helpers";
-import { createBentoGridPlan } from "./bento-grid";
 import {
   CARD_GAP,
   LAYOUT_TARGET_ASPECT_RATIO,
@@ -173,9 +173,7 @@ export async function distributeNodes(
       occupiedWidth += node.width;
     }
 
-    const gap = snapSpacing(
-      (end - start - occupiedWidth) / (nodes.length - 1),
-    );
+    const gap = snapSpacing((end - start - occupiedWidth) / (nodes.length - 1));
     let x = start;
 
     await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
@@ -196,9 +194,7 @@ export async function distributeNodes(
     occupiedHeight += node.height;
   }
 
-  const gap = snapSpacing(
-    (end - start - occupiedHeight) / (nodes.length - 1),
-  );
+  const gap = snapSpacing((end - start - occupiedHeight) / (nodes.length - 1));
   let y = start;
 
   await forEachBatched(nodes, NODE_MUTATION_BATCH_SIZE, (node) => {
